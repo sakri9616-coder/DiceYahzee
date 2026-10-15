@@ -23,8 +23,9 @@ namespace ParvaMirabilia.Presentation
             {
                 var row = UiFactory.CreateRect("NpcCategory" + i, panel.transform, new Vector2(174, 34), new Vector2(0, 128 - i * 37));
                 SDText("Name", row, ScoreRules.Name((ScoreHandKind)i), 16, new Vector2(-24, 0), new Vector2(114, 32), SDRailInk, TextAnchor.MiddleLeft);
-                _sdNpcRoleChecks[i] = SDText("Used", row, "", 13, new Vector2(44, 0), new Vector2(18, 30), SDRailMuted, TextAnchor.MiddleCenter);
-                _sdNpcRoleValues[i] = SDText("Value", row, "—", 18, new Vector2(70, 0), new Vector2(32, 32), SDRailInk, TextAnchor.MiddleRight);
+                _sdNpcRoleChecks[i] = SDText("Used", row, "", 13, new Vector2(40, 0), new Vector2(18, 30), SDRailMuted, TextAnchor.MiddleCenter);
+                // Wide enough for a three-digit score; the check mark steps left to stay clear of it.
+                _sdNpcRoleValues[i] = SDText("Value", row, "—", 18, new Vector2(66, 0), new Vector2(40, 32), SDRailInk, TextAnchor.MiddleRight);
                 _sdNpcRoleValues[i].font = Resources.Load<Font>("Fonts/AoboshiOne-Regular") ?? _sdNpcRoleValues[i].font;
                 _sdNpcRoleMarkers[i] = UiFactory.CreatePanel("Intent", row, new Vector2(3, 28), new Vector2(-84, 0), SDPositive);
                 _sdNpcRoleMarkers[i].raycastTarget = false;

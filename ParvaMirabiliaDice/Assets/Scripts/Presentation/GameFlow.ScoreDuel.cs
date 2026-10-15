@@ -254,7 +254,8 @@ namespace ParvaMirabilia.Presentation
                 button.GetComponent<Shadow>().enabled = false;
                 _sdLiveCategories[i] = button;
                 SDText("Name", button.transform, ScoreRules.Name((ScoreHandKind)i), 16, new Vector2(-18, 0), new Vector2(126, 32), SDRailInk, TextAnchor.MiddleLeft);
-                _sdLiveValues[i] = SDText("Value", button.transform, "", 18, new Vector2(70, 0), new Vector2(32, 32), SDRailInk, TextAnchor.MiddleRight);
+                // Scores reach three digits (ヤッツィー of sixes is 162); 40px keeps them on one line.
+                _sdLiveValues[i] = SDText("Value", button.transform, "", 18, new Vector2(66, 0), new Vector2(40, 32), SDRailInk, TextAnchor.MiddleRight);
                 _sdLiveValues[i].font = Resources.Load<Font>("Fonts/AoboshiOne-Regular") ?? _sdLiveValues[i].font;
                 _sdLiveMarkers[i] = UiFactory.CreatePanel("Selected", button.transform, new Vector2(3, 30), new Vector2(-84, 0), SDPositive);
                 _sdLiveMarkers[i].raycastTarget = false;
