@@ -233,6 +233,7 @@ namespace ParvaMirabilia.Presentation
 
         private void Awake()
         {
+            KeepDrawingOutOfFocus();
             BuildCanvas();
             if (ConfigOverride == null && !LegacyPresentationForTests)
             {
@@ -246,6 +247,27 @@ namespace ParvaMirabilia.Presentation
             BuildExperience();
             BuildDuelPresentation();
             ShowScreen(Screen.Title);
+        }
+
+        // ---------------------------------------------------------------- focus
+        /// <summary>
+        /// Out of focus the player used to stop, and a repaint Windows asked for then (a click outside the window,
+        /// another window moved over it) drew the camera alone: its skybox showed instead of the game, which is
+        /// all one overlay canvas. The game now goes on drawing out of focus, and the camera clears to the table
+        /// colour, so that no frame shows sky. The sound still pauses out of focus, as it did while the player stopped.
+        /// </summary>
+        private static void KeepDrawingOutOfFocus()
+        {
+            Application.runInBackground = true;
+            Camera view = Camera.main;
+            if (view == null) return;
+            view.clearFlags = CameraClearFlags.SolidColor;
+            view.backgroundColor = UiFactory.Background;
+        }
+
+        private void OnApplicationFocus(bool focused)
+        {
+            AudioListener.pause = !focused;
         }
 
         // ---------------------------------------------------------------- canvas

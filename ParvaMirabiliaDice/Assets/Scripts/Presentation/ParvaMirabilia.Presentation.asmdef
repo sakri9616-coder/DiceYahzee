@@ -2,7 +2,8 @@
     "name": "ParvaMirabilia.Presentation",
     "rootNamespace": "ParvaMirabilia.Presentation",
     "references": [
-        "ParvaMirabilia.Core"
+        "ParvaMirabilia.Core",
+        "AsistBridge.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

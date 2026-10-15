@@ -37,6 +37,7 @@
     "com.unity.modules.xr": "1.0.0",
     "com.unity.test-framework": "1.6.0",
     "com.unity.ugui": "2.0.0",
+    "com.asist.game-bridge": "file:D:/dev/asist-game-bridge",
     "com.kitwright.unity.mcp": "https://github.com/kitwright/unity-mcp.git"
   }
 }

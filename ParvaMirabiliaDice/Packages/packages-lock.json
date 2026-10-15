@@ -1,5 +1,11 @@
 {
   "dependencies": {
+    "com.asist.game-bridge": {
+      "version": "file:D:/dev/asist-game-bridge",
+      "depth": 0,
+      "source": "local",
+      "dependencies": {}
+    },
     "com.kitwright.unity.mcp": {
       "version": "https://github.com/kitwright/unity-mcp.git",
       "depth": 0,
