@@ -1,0 +1,52 @@
+[
+  {
+    "path": "D:\\MimoGame\\ParvaMirabiliaDice\\Assets\\Resources\\Art\\Frames\\engraved.png",
+    "bytes": 170,
+    "sha256": "313180AEFF83CED12DA57141E8CB48EF2AE24D47E04F19400E72AA474C628500"
+  },
+  {
+    "path": "D:\\MimoGame\\ParvaMirabiliaDice\\Assets\\Resources\\Art\\Icons\\burning-embers.png",
+    "bytes": 9034,
+    "sha256": "815B880A6EF7791F31AE2DE83213571C0C780D8EF0A074F0ED5DA25020394734"
+  },
+  {
+    "path": "D:\\MimoGame\\ParvaMirabiliaDice\\Assets\\Resources\\Art\\Icons\\comet-spark.png",
+    "bytes": 7574,
+    "sha256": "4A7ACEB1920792AFDEFA03A652F053E3871A0D60668DE85A75E9F4F43A24C787"
+  },
+  {
+    "path": "D:\\MimoGame\\ParvaMirabiliaDice\\Assets\\Resources\\Art\\Icons\\crossed-swords.png",
+    "bytes": 8501,
+    "sha256": "082CEF08B0570A13320154539B712FA8423298CB978593959467AE5489EED65F"
+  },
+  {
+    "path": "D:\\MimoGame\\ParvaMirabiliaDice\\Assets\\Resources\\Art\\Icons\\crowned-explosion.png",
+    "bytes": 10284,
+    "sha256": "FF8D93AE1D16EE2176F6B1F5070A69D5ACF108AC37D56A6F22571537DF97859C"
+  },
+  {
+    "path": "D:\\MimoGame\\ParvaMirabiliaDice\\Assets\\Resources\\Art\\Icons\\crystal-ball.png",
+    "bytes": 8066,
+    "sha256": "FBAC0DDF7FBBDF7D570BA4F9B9BC8CA1CE315534333FAB602814B771F5BE9C76"
+  },
+  {
+    "path": "D:\\MimoGame\\ParvaMirabiliaDice\\Assets\\Resources\\Art\\Icons\\edged-shield.png",
+    "bytes": 10222,
+    "sha256": "EF2E6EB16FEE6A88940A3431FA5988E94BDE34FD1640B411CF9D4AB0D05E33F8"
+  },
+  {
+    "path": "D:\\MimoGame\\ParvaMirabiliaDice\\Assets\\Resources\\Art\\Icons\\fire-silhouette.png",
+    "bytes": 8909,
+    "sha256": "FE345178C9F72CB10236EA5CF491A2CC1B8ECCBD37BDE3857C12243BDA1C5D2B"
+  },
+  {
+    "path": "D:\\MimoGame\\ParvaMirabiliaDice\\Assets\\Resources\\Art\\Icons\\lightning-helix.png",
+    "bytes": 6074,
+    "sha256": "A2A049923500CAFF39869569D2163BA7D0A687E1054108B6B3DDADCEB0E2DAD9"
+  },
+  {
+    "path": "D:\\MimoGame\\ParvaMirabiliaDice\\Assets\\Resources\\Art\\Textures\\leather-white.jpg",
+    "bytes": 728363,
+    "sha256": "4D916DFE89C9D2B88BF52E0C70C6A9798A5C29C8C2FCB6BA1AB7B7DED9EF3ED5"
+  }
+]

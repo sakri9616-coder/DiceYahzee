@@ -1,0 +1,16 @@
+{
+    "name": "ParvaMirabilia.Presentation",
+    "rootNamespace": "ParvaMirabilia.Presentation",
+    "references": [
+        "ParvaMirabilia.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

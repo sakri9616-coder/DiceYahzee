@@ -1,0 +1,13 @@
+# DiceYahzee third-party assets
+
+- UI Pack 2.0 — Kenney, https://kenney.nl/assets/ui-pack — CC0. Three panel/button images and one arrow image in current UI.
+- Input Prompts 1.5A — Kenney, https://kenney.nl/assets/input-prompts — CC0. Three mouse outline images in current UI.
+- Game Icons 1.0 — Kenney, https://kenney.nl/assets/game-icons — CC0. Lock, sound, mute and menu images in current UI.
+- Noto Sans JP Regular — Noto CJK project, https://github.com/notofonts/noto-cjk/tree/main/Sans/SubsetOTF/JP — SIL Open Font License 1.1. Embedded Japanese UI font for WebGL.
+
+- Fantasy UI Borders 1.0 — Kenney, https://kenney.nl/assets/fantasy-ui-borders — CC0. Source License.txt preserved in ThirdParty/Kenney-FantasyUI/LICENSE.txt. Selected file: panel-border-006.png, renamed engraved.png. Display tinted, sliced and resized.
+- Icons — Lorc, https://game-icons.net — Creative Commons Attribution 3.0 Unported, https://creativecommons.org/licenses/by/3.0/ . Crystal Ball, Edged Shield, Fire Silhouette, Crossed Swords, Burning Embers, Lightning Helix, Comet Spark, Crowned Explosion. Transparent white PNG variants obtained directly from game-icons.net. Display tinted and resized; PNG files are not otherwise modified.
+- Leather White — Rob Tuytel, Poly Haven, https://polyhaven.com/a/leather_white — CC0, https://polyhaven.com/license . 1K diffuse JPEG; displayed tiled with a teal tint.
+- Aoboshi One — Copyright 2020 The Aoboshi Font Project Authors (https://github.com/matsuba723/Aoboshi), https://github.com/google/fonts/tree/main/ofl/aoboshione — SIL Open Font License 1.1. Full license preserved in ThirdParty/AoboshiOne/OFL.txt. Unmodified font embedded for English headings.
+
+No image-generation model outputs are included in the project. Existing StepFun-generated audio is separately documented in docs/ASSET_LICENSES.md.

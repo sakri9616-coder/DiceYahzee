@@ -1,0 +1,24 @@
+{
+    "name": "ParvaMirabilia.Presentation.Tests",
+    "rootNamespace": "",
+    "references": [
+        "ParvaMirabilia.Core",
+        "ParvaMirabilia.Presentation",
+        "UnityEngine.TestRunner",
+        "UnityEngine.UI",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

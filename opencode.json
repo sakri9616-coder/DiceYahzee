@@ -1,0 +1,13 @@
+﻿
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/mimo-v2.6-flash-free",
+  "mcp": {
+    "servers": {
+      "kitwright": {
+        "type": "remote",
+        "url": "http://127.0.0.1:9445/p/232506c8/t/8123646f30953a24d4fa957fdb82435/"
+      }
+    }
+  }
+}

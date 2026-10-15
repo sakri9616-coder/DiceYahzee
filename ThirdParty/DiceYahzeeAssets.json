@@ -1,0 +1,217 @@
+{
+  "version": "0.9.2",
+  "acquired": "2026-10-11",
+  "author": "Kenney",
+  "aiGeneratedImages": false,
+  "items": [
+    {
+      "resource": "Art/DiceYahzee/button-primary",
+      "file": "ParvaMirabiliaDice/Assets/Resources/Art/DiceYahzee/button-primary.png",
+      "width": 384,
+      "height": 128,
+      "spriteBorderLTRB": [
+        16,
+        16,
+        16,
+        16
+      ],
+      "sourceUrl": "https://kenney.nl/assets/ui-pack",
+      "archive": "ThirdParty/Kenney-UIPack/source.zip",
+      "archiveEntry": "PNG/Grey/Double/button_rectangle_depth_gradient.png",
+      "license": "CC0-1.0",
+      "licenseFile": "ThirdParty/Kenney-UIPack/LICENSE.txt",
+      "sha256": "7A4C6CD08DCFF68F50DC6DB3AA4F4992FD88434B841FC10581E915089FBA15BB",
+      "changes": "Original PNG unchanged; Unity sprite import, tinting and nine-slicing permitted."
+    },
+    {
+      "resource": "Art/DiceYahzee/icon-arrow-right",
+      "file": "ParvaMirabiliaDice/Assets/Resources/Art/DiceYahzee/icon-arrow-right.png",
+      "width": 64,
+      "height": 64,
+      "spriteBorderLTRB": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sourceUrl": "https://kenney.nl/assets/ui-pack",
+      "archive": "ThirdParty/Kenney-UIPack/source.zip",
+      "archiveEntry": "PNG/Grey/Double/arrow_basic_e.png",
+      "license": "CC0-1.0",
+      "licenseFile": "ThirdParty/Kenney-UIPack/LICENSE.txt",
+      "sha256": "D52BD0D516E3AE1AAB5D3C06BC7850601FD8721912D169212975A7DD47F9907A",
+      "changes": "Original PNG unchanged; Unity sprite import, tinting and nine-slicing permitted."
+    },
+    {
+      "resource": "Art/DiceYahzee/icon-lock",
+      "file": "ParvaMirabiliaDice/Assets/Resources/Art/DiceYahzee/icon-lock.png",
+      "width": 100,
+      "height": 100,
+      "spriteBorderLTRB": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sourceUrl": "https://kenney.nl/assets/game-icons",
+      "archive": "ThirdParty/Kenney-GameIcons/source.zip",
+      "archiveEntry": "PNG/White/2x/locked.png",
+      "license": "CC0-1.0",
+      "licenseFile": "ThirdParty/Kenney-GameIcons/LICENSE.txt",
+      "sha256": "B83E9F3D17E94A054FA0ADD775E89EB6973052DCA9185A4B5FFACE1D14CF9CD1",
+      "changes": "Original PNG unchanged; Unity sprite import, tinting and nine-slicing permitted."
+    },
+    {
+      "resource": "Art/DiceYahzee/icon-menu",
+      "file": "ParvaMirabiliaDice/Assets/Resources/Art/DiceYahzee/icon-menu.png",
+      "width": 100,
+      "height": 100,
+      "spriteBorderLTRB": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sourceUrl": "https://kenney.nl/assets/game-icons",
+      "archive": "ThirdParty/Kenney-GameIcons/source.zip",
+      "archiveEntry": "PNG/White/2x/barsHorizontal.png",
+      "license": "CC0-1.0",
+      "licenseFile": "ThirdParty/Kenney-GameIcons/LICENSE.txt",
+      "sha256": "3B8529604D7C8A3A28AA39709B8838031C87062A8E5A5EE0087C7E9D0357A14D",
+      "changes": "Original PNG unchanged; Unity sprite import, tinting and nine-slicing permitted."
+    },
+    {
+      "resource": "Art/DiceYahzee/icon-sound-off",
+      "file": "ParvaMirabiliaDice/Assets/Resources/Art/DiceYahzee/icon-sound-off.png",
+      "width": 100,
+      "height": 100,
+      "spriteBorderLTRB": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sourceUrl": "https://kenney.nl/assets/game-icons",
+      "archive": "ThirdParty/Kenney-GameIcons/source.zip",
+      "archiveEntry": "PNG/White/2x/audioOff.png",
+      "license": "CC0-1.0",
+      "licenseFile": "ThirdParty/Kenney-GameIcons/LICENSE.txt",
+      "sha256": "C82E3784ACEE369264AA9E6CFC91973729982DB5A2154D6ECDDFD1927414D676",
+      "changes": "Original PNG unchanged; Unity sprite import, tinting and nine-slicing permitted."
+    },
+    {
+      "resource": "Art/DiceYahzee/icon-sound",
+      "file": "ParvaMirabiliaDice/Assets/Resources/Art/DiceYahzee/icon-sound.png",
+      "width": 100,
+      "height": 100,
+      "spriteBorderLTRB": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sourceUrl": "https://kenney.nl/assets/game-icons",
+      "archive": "ThirdParty/Kenney-GameIcons/source.zip",
+      "archiveEntry": "PNG/White/2x/audioOn.png",
+      "license": "CC0-1.0",
+      "licenseFile": "ThirdParty/Kenney-GameIcons/LICENSE.txt",
+      "sha256": "AEE49FF7B9151214178079EB860A341958BA54627C93D0B2636B05670A37A585",
+      "changes": "Original PNG unchanged; Unity sprite import, tinting and nine-slicing permitted."
+    },
+    {
+      "resource": "Art/DiceYahzee/input-mouse-left",
+      "file": "ParvaMirabiliaDice/Assets/Resources/Art/DiceYahzee/input-mouse-left.png",
+      "width": 128,
+      "height": 128,
+      "spriteBorderLTRB": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sourceUrl": "https://kenney.nl/assets/input-prompts",
+      "archive": "ThirdParty/Kenney-InputPrompts/source.zip",
+      "archiveEntry": "Keyboard & Mouse/Double/mouse_left_outline.png",
+      "license": "CC0-1.0",
+      "licenseFile": "ThirdParty/Kenney-InputPrompts/LICENSE.txt",
+      "sha256": "60D4DE1952D8650C5CBE3F29D515ACFFC2E33AC4119F2E00A9E623CFA3895B36",
+      "changes": "Original PNG unchanged; Unity sprite import, tinting and nine-slicing permitted."
+    },
+    {
+      "resource": "Art/DiceYahzee/input-mouse-right",
+      "file": "ParvaMirabiliaDice/Assets/Resources/Art/DiceYahzee/input-mouse-right.png",
+      "width": 128,
+      "height": 128,
+      "spriteBorderLTRB": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sourceUrl": "https://kenney.nl/assets/input-prompts",
+      "archive": "ThirdParty/Kenney-InputPrompts/source.zip",
+      "archiveEntry": "Keyboard & Mouse/Double/mouse_right_outline.png",
+      "license": "CC0-1.0",
+      "licenseFile": "ThirdParty/Kenney-InputPrompts/LICENSE.txt",
+      "sha256": "A686F77ABFF016506CEAC5CFEFDAA4A9DABEC380A518AD7AC548B36322E624F1",
+      "changes": "Original PNG unchanged; Unity sprite import, tinting and nine-slicing permitted."
+    },
+    {
+      "resource": "Art/DiceYahzee/input-mouse-scroll",
+      "file": "ParvaMirabiliaDice/Assets/Resources/Art/DiceYahzee/input-mouse-scroll.png",
+      "width": 128,
+      "height": 128,
+      "spriteBorderLTRB": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sourceUrl": "https://kenney.nl/assets/input-prompts",
+      "archive": "ThirdParty/Kenney-InputPrompts/source.zip",
+      "archiveEntry": "Keyboard & Mouse/Double/mouse_scroll_vertical_outline.png",
+      "license": "CC0-1.0",
+      "licenseFile": "ThirdParty/Kenney-InputPrompts/LICENSE.txt",
+      "sha256": "766D705D48FAA19B5546D18A433FCF21A1DDFD2C2CD9316D31FB03E1F39633ED",
+      "changes": "Original PNG unchanged; Unity sprite import, tinting and nine-slicing permitted."
+    },
+    {
+      "resource": "Art/DiceYahzee/panel-bordered",
+      "file": "ParvaMirabiliaDice/Assets/Resources/Art/DiceYahzee/panel-bordered.png",
+      "width": 384,
+      "height": 128,
+      "spriteBorderLTRB": [
+        16,
+        16,
+        16,
+        16
+      ],
+      "sourceUrl": "https://kenney.nl/assets/ui-pack",
+      "archive": "ThirdParty/Kenney-UIPack/source.zip",
+      "archiveEntry": "PNG/Grey/Double/button_rectangle_border.png",
+      "license": "CC0-1.0",
+      "licenseFile": "ThirdParty/Kenney-UIPack/LICENSE.txt",
+      "sha256": "D9A2A7D00E35072BBD6A1A5DB3F50D251E216D26E8031E8E27E027E277C10C7B",
+      "changes": "Original PNG unchanged; Unity sprite import, tinting and nine-slicing permitted."
+    },
+    {
+      "resource": "Art/DiceYahzee/panel-flat",
+      "file": "ParvaMirabiliaDice/Assets/Resources/Art/DiceYahzee/panel-flat.png",
+      "width": 384,
+      "height": 128,
+      "spriteBorderLTRB": [
+        16,
+        16,
+        16,
+        16
+      ],
+      "sourceUrl": "https://kenney.nl/assets/ui-pack",
+      "archive": "ThirdParty/Kenney-UIPack/source.zip",
+      "archiveEntry": "PNG/Grey/Double/button_rectangle_flat.png",
+      "license": "CC0-1.0",
+      "licenseFile": "ThirdParty/Kenney-UIPack/LICENSE.txt",
+      "sha256": "A1EFF64C4B5DD37D56CAF3D5F55474D5CE6475576731F9DC2418CCEA9307FF3A",
+      "changes": "Original PNG unchanged; Unity sprite import, tinting and nine-slicing permitted."
+    }
+  ]
+}
