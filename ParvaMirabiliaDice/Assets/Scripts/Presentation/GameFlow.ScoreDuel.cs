@@ -14,6 +14,7 @@ namespace ParvaMirabilia.Presentation
         private RectTransform _sdRules, _sdSheet, _sdMenu, _sdCredits, _sdPractice;
         private ScoreDuel _sdEngine;
         private NpcPersonality _sdOpponent = NpcPersonality.Balanced;
+        private int _sdOpponentIndex;
         private ScoreHandKind _sdSelectedKind;
         private readonly List<DiceView> _sdDice = new List<DiceView>();
         private readonly List<DiceView> _sdNpcDice = new List<DiceView>();
@@ -26,7 +27,7 @@ namespace ParvaMirabilia.Presentation
         private Text _sdPracticeFeedback;
         private Button _sdPracticeFinishButton;
         private readonly Text[] _sdDieLabels = new Text[5];
-        private readonly Button[] _sdOpponents = new Button[3];
+        private readonly Button[] _sdOpponents = new Button[4];
         private readonly Button[] _sdCategoryButtons = new Button[9];
         private readonly Text[] _sdCategoryNames = new Text[9];
         private readonly Text[] _sdCategoryValues = new Text[9];
@@ -53,9 +54,25 @@ namespace ParvaMirabilia.Presentation
         private static readonly Color SDMuted = new Color32(171, 191, 194, 255);
         private static readonly Color SDPositive = new Color32(203, 168, 106, 255);
         private static readonly Color SDNegative = new Color32(239, 156, 144, 255);
-        private static readonly string[] SDOpponentLabels = { "標準", "上級", "上級・大役" };
-        private static readonly NpcPersonality[] SDOpponentKinds =
-            { NpcPersonality.Balanced, NpcPersonality.Expert, NpcPersonality.Aggressive };
+        private static readonly Color SDScoreGold = new Color32(240, 205, 132, 255);
+
+        /// <summary>One selectable opponent: a planning personality plus the enemy health it starts with.</summary>
+        private struct SDOpponentProfile
+        {
+            public string Label;
+            public NpcPersonality Kind;
+            public int NpcHp;
+        }
+
+        // The fourth difficulty plays the same expert planning from a higher enemy health pool,
+        // so difficulty can be raised without inventing a new hidden rule.
+        private static readonly SDOpponentProfile[] SDOpponentProfiles =
+        {
+            new SDOpponentProfile { Label = "標準", Kind = NpcPersonality.Balanced, NpcHp = ScoreDuel.StartingHp },
+            new SDOpponentProfile { Label = "上級", Kind = NpcPersonality.Expert, NpcHp = ScoreDuel.StartingHp },
+            new SDOpponentProfile { Label = "上級・大役", Kind = NpcPersonality.Aggressive, NpcHp = ScoreDuel.StartingHp },
+            new SDOpponentProfile { Label = "上級・高耐久", Kind = NpcPersonality.Expert, NpcHp = ScoreDuel.EnhancedStartingHp }
+        };
 
         private bool ScoreDuelPresentationActive => _sdRoot != null && _sdRoot.gameObject.activeSelf;
         private bool SDModalOpen => (_sdRules != null && _sdRules.gameObject.activeSelf) ||
@@ -121,6 +138,19 @@ namespace ParvaMirabilia.Presentation
             return label;
         }
 
+        /// <summary>
+        /// A dark edge behind a large numeral. The gold reads well on the dark table at a glance,
+        /// but the thin strokes of a three-digit score fade over the leather grain without it.
+        /// </summary>
+        private static void SDAddScoreEdge(Text label)
+        {
+            if (label == null) return;
+            var edge = label.gameObject.AddComponent<Outline>();
+            edge.effectColor = new Color(0.03f, 0.07f, 0.08f, .9f);
+            edge.effectDistance = new Vector2(2, -2);
+            edge.useGraphicAlpha = true;
+        }
+
         private Button SDButton(string name, Transform root, Vector2 pos, Vector2 size,
             string text, int fontSize, UnityAction action, bool primary = false)
         {
@@ -163,11 +193,12 @@ namespace ParvaMirabilia.Presentation
             }
             var line = UiFactory.CreatePanel("Rule", _sdTitle, new Vector2(532, 1), new Vector2(0, -11), SDPositive);
             line.color = new Color(.8f,.66f,.42f,.3f);
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < SDOpponentProfiles.Length; i++)
             {
                 int captured = i;
                 _sdOpponents[i] = SDButton("Opponent" + i, _sdTitle,
-                    new Vector2((i - 1) * 184, -65), new Vector2(168, 52), SDOpponentLabels[i], 18,
+                    new Vector2((i - (SDOpponentProfiles.Length - 1) * .5f) * 184, -65), new Vector2(168, 52),
+                    SDOpponentProfiles[i].Label, 18,
                     () => SDSelectOpponent(captured));
             }
             _sdOpponentNote = SDText("OpponentNote", _sdTitle, "", 1, Vector2.zero, Vector2.zero);
@@ -198,11 +229,12 @@ namespace ParvaMirabilia.Presentation
             }
             _sdIntentLabel = SDText("Intent", _sdBattle, "", 17, new Vector2(0, 139), new Vector2(300, 29), SDRailInk);
             _sdNpcFormula = SDText("NpcFormula", _sdBattle, "", 13, new Vector2(0, 105), new Vector2(300, 22), SDRailMuted);
-            _sdNpcScoreNumber = SDText("NpcScore", _sdBattle, "", 42, new Vector2(0, 67), new Vector2(240, 46), SDPositive);
+            _sdNpcScoreNumber = SDText("NpcScore", _sdBattle, "", 50, new Vector2(0, 67), new Vector2(240, 46), SDScoreGold);
             _sdNpcScoreNumber.font = Resources.Load<Font>("Fonts/AoboshiOne-Regular") ?? _sdNpcScoreNumber.font;
             // Noto Sans JP has a taller line box on WebGL; Truncate can discard
             // the entire numeral even when its visible glyph fits this area.
             _sdNpcScoreNumber.verticalOverflow = VerticalWrapMode.Overflow;
+            SDAddScoreEdge(_sdNpcScoreNumber);
             _sdToast = SDText("FormationToast", _sdBattle, "", 22, new Vector2(SDHandCenterX, -111), new Vector2(640, 38), SDPositive);
             var toastEdge = _sdToast.gameObject.AddComponent<Outline>();
             toastEdge.effectColor = new Color(0.04f, .09f, .10f, .95f);
@@ -482,8 +514,9 @@ namespace ParvaMirabilia.Presentation
 
         private void SDSelectOpponent(int index)
         {
-            if (index < 0 || index >= SDOpponentKinds.Length) return;
-            _sdOpponent = SDOpponentKinds[index];
+            if (index < 0 || index >= SDOpponentProfiles.Length) return;
+            _sdOpponentIndex = index;
+            _sdOpponent = SDOpponentProfiles[index].Kind;
             for (int i = 0; i < _sdOpponents.Length; i++)
             {
                 UiFactory.StyleSelected(_sdOpponents[i], i == index);
@@ -494,13 +527,14 @@ namespace ParvaMirabilia.Presentation
                 }
             }
             _sdOpponentNote.text = index == 1 ? "強い役へ振り直す相手。" : index == 2 ?
-                "今ある役を残し、慎重に振り直す相手。" : "点数と残っている役を比べる相手。";
+                "今ある役を残し、慎重に振り直す相手。" : index == 3 ?
+                "体力が高く長期戦になる相手。役の残し方を見直す。" : "点数と残っている役を比べる相手。";
         }
 
         private void SDStartMatch()
         {
             SDCloseModals();
-            _sdEngine = new ScoreDuel(FreshSeed(), _sdOpponent);
+            _sdEngine = new ScoreDuel(FreshSeed(), _sdOpponent, SDOpponentProfiles[_sdOpponentIndex].NpcHp);
             _sdEngine.Roll();
             _sdTitle.gameObject.SetActive(false);
             _sdResult.gameObject.SetActive(false);
@@ -533,6 +567,7 @@ namespace ParvaMirabilia.Presentation
             _sdInstruction.gameObject.SetActive(false);
             _sdHpAge = -1;
             SDSetHp(_sdEngine.PlayerHp, _sdEngine.NpcHp);
+            SDShowHpDeltas(0);
             SDEvaluateHand(false);
         }
 
@@ -629,6 +664,8 @@ namespace ParvaMirabilia.Presentation
         {
             if (!SDCanPlan || _sdDragging || _sdEngine.SavedHandUsed) return;
             _sdSaveArmed = !_sdSaveArmed;
+            SDBeginCarryToggle();
+            GameAudio.Play("die_keep");
             SDRefresh();
         }
 
@@ -684,6 +721,7 @@ namespace ParvaMirabilia.Presentation
             if (_sdEngine.Outcome.Result != MatchResult.Draw)
                 GameAudio.Play(_sdEngine.Outcome.Result == MatchResult.PlayerWin ? "win" : "lose");
             SDSetHp(_sdEngine.PlayerHp, _sdEngine.NpcHp);
+            SDShowHpDeltas(0);
             _sdBattle.gameObject.SetActive(false);
             _sdResult.gameObject.SetActive(true);
             _sdResultTitle.text = MatchResults.DisplayName(_sdEngine.Outcome.Result);
@@ -773,10 +811,10 @@ namespace ParvaMirabilia.Presentation
                 var button = _sdLiveCategories[i]; button.interactable = enabled;
                 button.GetComponent<Image>().color = selected ? new Color32(193, 157, 95, 255) : new Color(1,1,1,.005f);
                 Text name = button.transform.Find("Name").GetComponent<Text>();
-                name.color = selected ? SDPaperInk : offer.IsAvailable ? SDRailInk : SDRailMuted;
+                name.color = selected ? SDPaperInk : offer.IsAvailable ? SDRailInk : SDRailUsed;
                 name.fontStyle = selected ? FontStyle.Bold : FontStyle.Normal;
                 _sdLiveValues[i].text = !offer.IsAvailable ? "—" : _sdRolling ? "·" : offer.Score.ToString();
-                _sdLiveValues[i].color = selected ? SDPaperInk : offer.IsAvailable ? SDRailInk : SDRailMuted;
+                _sdLiveValues[i].color = selected ? SDPaperInk : offer.IsAvailable ? SDRailInk : SDRailUsed;
                 _sdLiveMarkers[i].gameObject.SetActive(selected && !_sdRolling);
             }
         }
@@ -784,10 +822,11 @@ namespace ParvaMirabilia.Presentation
         private void SDSetHp(float player, float npc)
         {
             if (_sdEngine == null) return;
+            int npcMax = _sdEngine.NpcMaxHp;
             _sdPlayerHpLabel.text = "あなた  " + Mathf.RoundToInt(player) + " / " + ScoreDuel.StartingHp;
-            _sdNpcHpLabel.text = "相手  " + Mathf.RoundToInt(npc) + " / " + ScoreDuel.StartingHp;
+            _sdNpcHpLabel.text = "相手  " + Mathf.RoundToInt(npc) + " / " + npcMax;
             _sdPlayerBar.rectTransform.sizeDelta = new Vector2(SDHpWidth * Mathf.Clamp01(player / ScoreDuel.StartingHp), SDHpThickness);
-            _sdNpcBar.rectTransform.sizeDelta = new Vector2(SDHpWidth * Mathf.Clamp01(npc / ScoreDuel.StartingHp), SDHpThickness);
+            _sdNpcBar.rectTransform.sizeDelta = new Vector2(SDHpWidth * Mathf.Clamp01(npc / npcMax), SDHpThickness);
         }
 
         private void SDOpenSheet()
@@ -806,8 +845,8 @@ namespace ParvaMirabilia.Presentation
                 _sdCategoryNames[index].text = ScoreRules.Name(offer.Kind);
                 _sdCategoryValues[index].text = used ? oldScore + "点 · 使用済み" : _sdCommitted ? "未使用" :
                     offer.Score + "点" + (offer.IsFormed ? "" : " · 未成立");
-                _sdCategoryNames[index].color = used ? SDMuted : UiFactory.Text;
-                _sdCategoryValues[index].color = used ? SDMuted : offer.Kind == _sdSelectedKind ? SDPositive : UiFactory.Text;
+                _sdCategoryNames[index].color = used ? SDRailUsed : UiFactory.Text;
+                _sdCategoryValues[index].color = used ? SDRailUsed : offer.Kind == _sdSelectedKind ? SDPositive : UiFactory.Text;
                 SDSetButtonEnabled(_sdCategoryButtons[index], !used && !_sdCommitted);
             }
             _sdSheet.gameObject.SetActive(true);
@@ -865,6 +904,7 @@ namespace ParvaMirabilia.Presentation
             SDRefreshDieLabelsVisibility();
             SDTickAttackMotion(dt);
             SDTickCarryReturn(dt);
+            SDTickCarryToggle(dt);
             SDTickGestureGuides(dt);
             foreach (DiceView die in _sdPracticeDice) die.Tick(dt);
             if (_sdPracticeRolling)
@@ -916,7 +956,8 @@ namespace ParvaMirabilia.Presentation
                 float t = Mathf.Clamp01(_sdHpAge / .42f);
                 float eased = 1 - (1 - t) * (1 - t);
                 SDSetHp(Mathf.Lerp(_sdPlayerHpFrom, _sdEngine.PlayerHp, eased), Mathf.Lerp(_sdNpcHpFrom, _sdEngine.NpcHp, eased));
-                if (t >= 1) _sdHpAge = -1;
+                SDShowHpDeltas(1 - t);
+                if (t >= 1) { _sdHpAge = -1; SDShowHpDeltas(0); }
             }
             if (Input.GetKeyDown(KeyCode.Escape)) SDHandleShortcut(KeyCode.Escape);
             if (Input.GetMouseButtonDown(0)) SDHandleTableClick(Input.mousePosition);

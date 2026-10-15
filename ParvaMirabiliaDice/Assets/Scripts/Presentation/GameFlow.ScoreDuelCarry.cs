@@ -10,6 +10,8 @@ namespace ParvaMirabilia.Presentation
         private readonly DiceView[] _sdCarryDice = new DiceView[5];
         private ScoreHandEffectGraphic _sdCarryEffect;
         private float _sdCarryReturnAge = -1;
+        private float _sdCarryToggleAge = -1;
+        private const float SDCarryToggleDuration = .34f;
 
         private void SDBuildCarryPresentation()
         {
@@ -61,7 +63,41 @@ namespace ParvaMirabilia.Presentation
             _sdSaveButton.GetComponentInChildren<Text>().color = ink;
             _sdSaveSymbol.color = ink;
             _sdSaveButton.transform.Find("SaveCount").GetComponent<Text>().color = ink;
-            if (!returning) SDDrawCarrySelection();
+            if (!returning && _sdCarryToggleAge < 0) SDDrawCarrySelection();
+        }
+
+        /// <summary>
+        /// A short pulse on the carry action so arming and disarming read as a deliberate state
+        /// change rather than an instant colour swap. Gold marks "on", muted marks "off".
+        /// </summary>
+        private void SDBeginCarryToggle()
+        {
+            _sdCarryToggleAge = _sdReducedMotion ? SDCarryToggleDuration : 0;
+            SDTickCarryToggle(0);
+        }
+
+        private void SDTickCarryToggle(float dt)
+        {
+            if (_sdCarryToggleAge < 0 || SDModalOpen || _sdCarryEffect == null) return;
+            _sdCarryToggleAge += dt;
+            float t = Mathf.Clamp01(_sdCarryToggleAge / SDCarryToggleDuration);
+            float ease = 1 - (1 - t) * (1 - t);
+            if (!_sdReducedMotion)
+            {
+                _sdCarryEffect.Clear();
+                var center = new Vector2(0, -232);
+                Color ink = _sdSaveArmed ? SDPositive : SDRailMuted;
+                ink.a = (1 - t) * .85f;
+                _sdCarryEffect.Ring(center, 28 + ease * 52, 2.6f, ink, 30);
+                _sdCarryEffect.Ring(center, 18 + ease * 30, 1.6f, ink, 24);
+                _sdCarryEffect.Flush();
+                if (_sdCarryRack != null)
+                    _sdCarryRack.localScale = Vector3.one * (1 + Mathf.Sin(t * Mathf.PI) * .08f);
+            }
+            if (t < 1) return;
+            _sdCarryToggleAge = -1;
+            if (_sdCarryRack != null) _sdCarryRack.localScale = Vector3.one;
+            SDDrawCarrySelection();
         }
 
         private void SDDrawCarrySelection()
@@ -123,6 +159,8 @@ namespace ParvaMirabilia.Presentation
         private void SDResetCarryPresentation()
         {
             _sdCarryReturnAge = -1;
+            _sdCarryToggleAge = -1;
+            if (_sdCarryRack != null) _sdCarryRack.localScale = Vector3.one;
             if (_sdCarryRackGroup != null) _sdCarryRackGroup.alpha = 1;
             if (_sdCarryRack != null) _sdCarryRack.gameObject.SetActive(false);
             if (_sdCarryEffect != null) { _sdCarryEffect.Clear(); _sdCarryEffect.Flush(); }
