@@ -283,6 +283,27 @@ namespace ParvaMirabilia.Tests
         }
 
         [Test]
+        public void HighDurabilityDifficultyRaisesOnlyTheEnemyHealth()
+        {
+            var standard = new ScoreDuel(104);
+            Assert.That(standard.NpcStartingHp, Is.EqualTo(ScoreDuel.StartingHp));
+            Assert.That(standard.NpcHp, Is.EqualTo(ScoreDuel.StartingHp));
+
+            var tough = new ScoreDuel(104, NpcPersonality.Expert, ScoreDuel.EnhancedStartingHp);
+            Assert.That(tough.PlayerHp, Is.EqualTo(ScoreDuel.StartingHp));
+            Assert.That(tough.NpcMaxHp, Is.EqualTo(ScoreDuel.EnhancedStartingHp));
+            Assert.That(tough.NpcHp, Is.EqualTo(ScoreDuel.EnhancedStartingHp));
+            Assert.That(tough.NpcHp, Is.GreaterThan(tough.PlayerHp));
+            // The same seed and personality still plan the same enemy hand; only the pool moved.
+            Assert.That(tough.Intent.Score, Is.EqualTo(new ScoreDuel(104, NpcPersonality.Expert).Intent.Score));
+
+            // A rematch keeps the chosen pool instead of silently shrinking it back.
+            tough.Begin();
+            Assert.That(tough.NpcHp, Is.EqualTo(ScoreDuel.EnhancedStartingHp));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new ScoreDuel(1, NpcPersonality.Balanced, 0));
+        }
+
+        [Test]
         public void ReceiptsKeepTheirDiceAndResetClearsScorecardsAndResult()
         {
             var game = new ScoreDuel(92);

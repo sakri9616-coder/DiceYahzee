@@ -319,11 +319,23 @@ namespace ParvaMirabilia.Core
         private IReadOnlyList<NpcRollSnapshot> _preparedNpcRolls;
 
         public const int StartingHp = 240;
+
+        /// <summary>
+        /// Enemy-only health for the high-durability difficulty. The player keeps
+        /// <see cref="StartingHp"/>, so the same contested rules run from a deliberately worse
+        /// position rather than from different rules.
+        /// </summary>
+        public const int EnhancedStartingHp = 360;
+
         public const int MinimumNormalDamage = 13;
         // This bound guards simulations, not gameplay. No turn limit or HP judgement is applied.
         public const int SafetyRoundBound = (StartingHp + MinimumNormalDamage - 1) / MinimumNormalDamage;
         public int MaxRounds { get { return SafetyRoundBound; } }
         public NpcPersonality Personality { get; private set; }
+
+        /// <summary>Enemy health at the start of a match; differs only on the high-durability difficulty.</summary>
+        public int NpcStartingHp { get; private set; }
+        public int NpcMaxHp { get { return NpcStartingHp; } }
         public MatchPhase Phase { get; private set; }
         public int Round { get; private set; }
         public int PlayerHp { get; private set; }
@@ -358,10 +370,12 @@ namespace ParvaMirabilia.Core
             }
         }
 
-        public ScoreDuel(int seed, NpcPersonality personality = NpcPersonality.Balanced)
+        public ScoreDuel(int seed, NpcPersonality personality = NpcPersonality.Balanced,
+            int npcStartingHp = StartingHp)
         {
             if (!Enum.IsDefined(typeof(NpcPersonality), personality)) throw new ArgumentOutOfRangeException(nameof(personality));
-            _seed = seed; Personality = personality;
+            if (npcStartingHp <= 0) throw new ArgumentOutOfRangeException(nameof(npcStartingHp));
+            _seed = seed; Personality = personality; NpcStartingHp = npcStartingHp;
             _playerUsedView = Array.AsReadOnly(_playerUsed);
             _npcUsedView = Array.AsReadOnly(_npcUsed);
             _historyView = _history.AsReadOnly();
@@ -377,7 +391,7 @@ namespace ParvaMirabilia.Core
             Array.Clear(_npcUsed, 0, _npcUsed.Length);
             _history.Clear(); Outcome = null; LastRound = null;
             SavedHandUsed = false; _savedDice = null; _savedHeld = null;
-            PlayerHp = NpcHp = StartingHp; Round = 1;
+            PlayerHp = StartingHp; NpcHp = NpcStartingHp; Round = 1;
             PrepareRound();
         }
 
