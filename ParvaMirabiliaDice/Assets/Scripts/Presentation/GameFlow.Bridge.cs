@@ -113,6 +113,56 @@ namespace ParvaMirabilia.Presentation
         [UnityEngine.Scripting.Preserve]
         private string NephiaDifficulty => NephiaInDuel ? SDOpponentProfiles[_sdOpponentIndex].Label : null;
 
+        [AsistBridge.NephiaVisible("ラウンド")]
+        [UnityEngine.Scripting.Preserve]
+        private int? NephiaRound => NephiaInDuel ? _sdEngine.Round : (int?)null;
+
+        [AsistBridge.NephiaVisible("使用済みの役")]
+        [UnityEngine.Scripting.Preserve]
+        private string[] NephiaPlayerUsedRoles => NephiaInDuel ? NephiaUsedRoles(_sdEngine.PlayerUsed) : null;
+
+        [AsistBridge.NephiaVisible("相手の使用済みの役")]
+        [UnityEngine.Scripting.Preserve]
+        private string[] NephiaNpcUsedRoles => NephiaInDuel ? NephiaUsedRoles(_sdEngine.NpcUsed) : null;
+
+        [AsistBridge.NephiaVisible("直前のラウンド")]
+        [UnityEngine.Scripting.Preserve]
+        private string NephiaLastRound
+        {
+            get
+            {
+                if (!NephiaInDuel || _sdEngine.LastRound == null) return null;
+                ScoreRound last = _sdEngine.LastRound;
+                return "R" + last.Round + " 自分: " + ScoreRules.Name(last.PlayerKind) + " " + last.PlayerScore + "点" +
+                    " / 相手: " + ScoreRules.Name(last.NpcKind) + " " + last.NpcScore + "点" +
+                    " / 与えたダメージ " + last.DamageToNpc + " / 受けたダメージ " + last.DamageToPlayer;
+            }
+        }
+
+        [AsistBridge.NephiaVisible("勝敗")]
+        [UnityEngine.Scripting.Preserve]
+        private string NephiaOutcome
+        {
+            get
+            {
+                if (!NephiaInDuel || !_sdResult.gameObject.activeInHierarchy) return null;
+                MatchOutcome outcome = _sdEngine.Outcome;
+                if (outcome == null) return null;
+                if (outcome.Result == MatchResult.PlayerWin) return "勝ち";
+                if (outcome.Result == MatchResult.NpcWin) return "負け";
+                return "引き分け";
+            }
+        }
+
+        // Role names in ScoreRules order, for every category the side has already used this cycle.
+        private static string[] NephiaUsedRoles(System.Collections.Generic.IReadOnlyList<bool> used)
+        {
+            var roles = new System.Collections.Generic.List<string>();
+            for (int i = 0; i < used.Count && i < ScoreRules.Names.Length; i++)
+                if (used[i]) roles.Add(ScoreRules.Names[i]);
+            return roles.ToArray();
+        }
+
         // ---------------------------------------------------------------- actions
         /// <summary>The same wall the player's own input meets: a modal, a throw in the air, a committed turn, a drag.</summary>
         private void NephiaRequirePlanning()
@@ -148,7 +198,7 @@ namespace ParvaMirabilia.Presentation
             SDHandleRightClick();
         }
 
-        [AsistBridge.NephiaAction("役を選ぶ", "使う役を役名で選ぶ（使える役と今の得点にある名前）")]
+        [AsistBridge.NephiaAction("役を選ぶ", "使う役を役名で選ぶ（使える役と今の得点にある名前。使用済みの役は選べない。9役すべて使うと使用済みが空に戻る）")]
         [UnityEngine.Scripting.Preserve]
         private void NephiaSelectRole(string role)
         {
