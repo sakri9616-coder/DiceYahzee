@@ -139,7 +139,9 @@ namespace ParvaMirabilia.Quality.Tests
         }
 
         /// <summary>Overwrites a seat's live dice, bypassing the private roll stream, so the
-        /// two rare result paths are pinned instead of left to a lucky seed.</summary>
+        /// two rare result paths are pinned instead of left to a lucky seed. It does not touch
+        /// VersusDuel's booked revealedDice copies, so assertions must only trust these dice
+        /// from the ChooseRoles phase onward, when the engine serves live rolls again.</summary>
         private static void SetDice(VersusDuel duel, int player, params int[] dice)
         {
             var players = (VersusPlayer[])typeof(VersusDuel)

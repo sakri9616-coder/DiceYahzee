@@ -617,6 +617,9 @@ namespace ParvaMirabilia.Presentation
                     // The guest's only submission override: open round 1 with Chance, so every
                     // recorded match contains a one-sided declaration of kind=0,8 (guest kind=8,0)
                     // and the Chance swap lands through a real connection instead of staying unverified.
+                    // Relies on joiner == LocalPlayerIndex == 1; if the transport ever renumbers
+                    // seats, this silently stops declaring instead of erroring, so the round-1
+                    // resolved trace would collapse back to kind=0,0 across every duel.
                     if (OnlineMe == 1 && _onlineState.round == 1) _onlineKind = (int)ScoreHandKind.Chance;
                     SendOnline(DuelNetworkAction.Submit);
                 }

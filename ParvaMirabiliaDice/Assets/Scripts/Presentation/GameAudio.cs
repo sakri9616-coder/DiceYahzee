@@ -151,6 +151,15 @@ namespace ParvaMirabilia.Presentation
             PlayerPrefs.Save();
         }
 
+        /// <summary>Flushes the pending volume save when the debouncer is cut short, so the
+        /// waiting coroutine cannot leave the preference unsaved for this session.</summary>
+        private void OnDisable()
+        {
+            if (!_volumeSavePending) return;
+            _volumeSavePending = false;
+            PlayerPrefs.Save();
+        }
+
         public static void ToggleMute()
         {
             if (Instance != null) SetVolume(Volume <= 0.001f ? Instance._lastAudibleVolume : 0f);
