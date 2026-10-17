@@ -73,6 +73,53 @@ namespace ParvaMirabilia.Quality.Tests
             yield return null;
         }
 
+        [UnityTest] public IEnumerator InviteCodeCanBeClickedAndTyped_AndVolumeSliderChangesPlayback()
+        {
+            Call("OpenOnline");
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+            var input = Read<InputField>("_onlineCode");
+            var eventSystem = EventSystem.current;
+            var pointer = new PointerEventData(eventSystem) {
+                button = PointerEventData.InputButton.Left,
+                position = RectTransformUtility.WorldToScreenPoint(null, input.transform.position)
+            };
+            var hits = new System.Collections.Generic.List<RaycastResult>();
+            eventSystem.RaycastAll(pointer, hits);
+            Assert.That(hits.Count, Is.GreaterThan(0));
+            Assert.That(ExecuteEvents.GetEventHandler<IPointerDownHandler>(hits[0].gameObject),
+                Is.EqualTo(input.gameObject), "the visible invite box must receive a real pointer click");
+            ExecuteEvents.Execute(input.gameObject, pointer, ExecuteEvents.pointerDownHandler);
+            ExecuteEvents.Execute(input.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+            yield return null;
+            Assert.That(input.isFocused, Is.True);
+            input.ProcessEvent(new Event { type = EventType.KeyDown, keyCode = KeyCode.A, character = 'A' });
+            input.ProcessEvent(new Event { type = EventType.KeyDown, keyCode = KeyCode.Alpha7, character = '7' });
+            Assert.That(input.text, Is.EqualTo("A7"));
+            input.ForceLabelUpdate();
+            Assert.That(input.placeholder.enabled, Is.False);
+
+            var slider = Read<Slider>("_soundSlider");
+            Assert.That(slider.gameObject.activeInHierarchy, Is.True);
+            Assert.That(slider.GetComponent<Image>().raycastTarget, Is.True);
+            float original = GameAudio.Volume;
+            bool hadContinuous = PlayerPrefs.HasKey("pv.audioVolume");
+            float stored = PlayerPrefs.GetFloat("pv.audioVolume", 0);
+            slider.value = .5f;
+            Assert.That(GameAudio.Volume, Is.EqualTo(.5f).Within(.001f));
+            AudioSource[] sources = GameAudio.Instance.GetComponents<AudioSource>();
+            Assert.That(sources[0].volume, Is.EqualTo(.1575f).Within(.001f), "BGM gain is 30% below the previous 0.45 cap");
+            slider.value = 0f;
+            Assert.That(sources[0].volume, Is.Zero);
+            GameAudio.SetVolume(original);
+            if (hadContinuous) PlayerPrefs.SetFloat("pv.audioVolume", stored);
+            else PlayerPrefs.DeleteKey("pv.audioVolume");
+            PlayerPrefs.Save();
+            input.DeactivateInputField();
+            eventSystem.SetSelectedGameObject(null);
+            yield return null;
+        }
+
         [UnityTest] public IEnumerator BackgroundPullMovesAllDice_AndButtonOriginsCannotFire()
         {
             var battle = Root("_sdBattle");
@@ -375,6 +422,21 @@ namespace ParvaMirabilia.Quality.Tests
             PressLive(ScoreHandKind.Chance);
             Assert.That(Read<ScoreHandKind>("_sdSelectedKind"), Is.EqualTo(ScoreHandKind.Chance));
             Assert.That(Read<Image[]>("_sdLiveMarkers")[(int)unformedKind].gameObject.activeSelf, Is.False);
+            yield return null;
+        }
+
+        [UnityTest] public IEnumerator ChanceDeclarationNamesTheDamageSwapWhileItCanStillBeChanged()
+        {
+            PressLive(ScoreHandKind.Chance);
+            Assert.That(Read<ScoreHandKind>("_sdSelectedKind"), Is.EqualTo(ScoreHandKind.Chance));
+            Assert.That(Read<Text>("_sdChanceCue").text, Is.EqualTo("チャンス：被害の受け手を入れ替え"),
+                "a chance declaration has to name the swap while the role is still changeable");
+            ScoreHandKind plain = ScoreHandKind.Pair;
+            foreach (ScoreOffer offer in Engine.Offers)
+                if (offer.IsAvailable && offer.Kind != ScoreHandKind.Chance) { plain = offer.Kind; break; }
+            PressLive(plain);
+            Assert.That(Read<ScoreHandKind>("_sdSelectedKind"), Is.EqualTo(plain));
+            Assert.That(Read<Text>("_sdChanceCue").text, Is.Empty, "the swap cue belongs to the chance declaration alone");
             yield return null;
         }
 
@@ -720,6 +782,7 @@ namespace ParvaMirabilia.Quality.Tests
             int[] damages = { 20, 40, 65, 100 };
             int previousStrokeCount = 0;
             var shapes = new System.Collections.Generic.HashSet<string>();
+            string weakestGeometry = null;
             Vector2[] homes = DiceHomes();
             Call("SDResetImpactPresentation");
             homes = DiceHomes();
@@ -729,7 +792,9 @@ namespace ParvaMirabilia.Quality.Tests
                 {
                     Call("SDResetImpactPresentation");
                     damageProperty.SetValue(round, damages[tier]);
-                    incomingProperty.SetValue(round, 120); // Incoming damage must not inflate the outgoing tier.
+                    // The impact tier follows the larger of the two sides, so a neutral
+                    // incoming value isolates each outgoing tier on its own.
+                    incomingProperty.SetValue(round, 0);
                     Call("SDStartAttackMotion");
                     Assert.That(Read<int>("_sdImpactTier"), Is.EqualTo(tier));
                     Write("_sdAttackAge", .24f); Call("SDAnimateImpactPresentation");
@@ -741,13 +806,30 @@ namespace ParvaMirabilia.Quality.Tests
                     var geometry = Read<Graphic>("_sdImpactGeometry");
                     int count = (int)geometry.GetType().GetField("_count", Private).GetValue(geometry);
                     Assert.That(count, Is.GreaterThan(previousStrokeCount), "stronger impacts draw more geometry"); previousStrokeCount = count;
-                    Assert.That(shapes.Add(GraphicGeometry(geometry)), Is.True, "every tier produces different rendered geometry");
-                    Assert.That(Read<Text>("_sdImpactCounter").text, Is.EqualTo("−" + Mathf.RoundToInt(damages[tier] * .6f)));
+                    string tierGeometry = GraphicGeometry(geometry);
+                    if (tier == 0) weakestGeometry = tierGeometry;
+                    Assert.That(shapes.Add(tierGeometry), Is.True, "every tier produces different rendered geometry");
+                    Assert.That(Read<Text>("_sdImpactCounter").text, Is.Empty, "damage is displayed at the HP bar instead of scattering");
+                    Assert.That(Read<Text>("_sdImpactIncomingCounter").text, Is.Empty);
                     Call("SDTickAttackMotion", 1f);
                     AssertHomes(homes); AssertBaseScales();
                     Assert.That(Read<float>("_sdAttackAge"), Is.LessThan(0));
                     Assert.That(Read<Text>("_sdImpactCounter").text, Is.Empty);
                 }
+
+                // A light outgoing hit paired with a heavy incoming one must reach the top
+                // tier and draw the strong contact shape rather than the weak 20-damage one.
+                Assert.That(weakestGeometry, Is.Not.Null);
+                Call("SDResetImpactPresentation");
+                damageProperty.SetValue(round, damages[0]);
+                incomingProperty.SetValue(round, 120);
+                Call("SDStartAttackMotion");
+                Assert.That(Read<int>("_sdImpactTier"), Is.EqualTo(3),
+                    "20 outgoing with 120 incoming must reach the top impact tier");
+                Write("_sdAttackAge", .36f); Call("SDAnimateImpactPresentation");
+                Assert.That(Read<bool>("_sdImpactContact"), Is.True);
+                Assert.That(GraphicGeometry(Read<Graphic>("_sdImpactGeometry")), Is.Not.EqualTo(weakestGeometry),
+                    "the heavy incoming hit draws the strong contact geometry, not the weak outgoing shape");
             }
             finally
             {
@@ -826,8 +908,10 @@ namespace ParvaMirabilia.Quality.Tests
         }
         private void AssertForecastNumbers(ScoreForecast forecast)
         {
-            Assert.That(Read<Text>("_sdNpcDamage").text, Is.EqualTo("−" + forecast.DamageToNpc));
-            Assert.That(Read<Text>("_sdPlayerDamage").text, Is.EqualTo("−" + forecast.DamageToPlayer));
+            Assert.That(ScoreDuelHealthLine.Damage(Read<Text>("_sdNpcHpLabel")), Is.EqualTo(forecast.DamageToNpc),
+                "the enemy bar names the drop the chosen role lands on it");
+            Assert.That(ScoreDuelHealthLine.Damage(Read<Text>("_sdPlayerHpLabel")), Is.EqualTo(forecast.DamageToPlayer),
+                "the player bar names the drop the chosen role takes");
             Assert.That(Read<Text>("_sdEffectLabel").text, Is.Empty);
             var kind = Read<ScoreHandKind>("_sdSelectedKind");
             var offer = ScoreRules.Evaluate(kind, Engine.PlayerDice);

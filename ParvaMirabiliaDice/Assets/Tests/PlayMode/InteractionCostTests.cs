@@ -236,16 +236,21 @@ namespace ParvaMirabilia.Tests.PlayMode
         }
 
         // ------------------------------------------------------------- reflection
-        /// <summary>An offer that is not the one currently declared, or -1 when only one exists.</summary>
+        /// <summary>A different currently clickable role, or -1 when there is no such choice.</summary>
         private int OtherYakuIndex()
         {
             YakuKind current = SelectedYaku();
             YakuOffer[] offers = Yaku.Evaluate(_engine.PlayerDice, _engine.Config);
+            var buttons = Field("_yakuButtons")?.GetValue(_flow) as List<Button>;
+            if (buttons == null) return -1;
 
             int other = -1;
-            for (int i = 0; i < offers.Length; i++)
+            int count = _engine.Config.TacticalEnabled ? buttons.Count : Math.Min(offers.Length, buttons.Count);
+            for (int i = 0; i < count; i++)
             {
-                if (offers[i].Kind != current)
+                var button = buttons[i];
+                YakuKind kind = _engine.Config.TacticalEnabled ? (YakuKind)i : offers[i].Kind;
+                if (kind != current && button.gameObject.activeInHierarchy && button.interactable)
                     other = i;
             }
 

@@ -71,7 +71,7 @@ namespace ParvaMirabilia.Presentation
         {
             SDBuildImpactPresentation();
             _sdImpactDamage = _sdEngine.LastRound.DamageToNpc;
-            int strength = _sdImpactDamage;
+            int strength = Mathf.Max(_sdImpactDamage, _sdEngine.LastRound.DamageToPlayer);
             _sdImpactTier = strength < 30 ? 0 : strength < 50 ? 1 : strength < 80 ? 2 : 3;
             _sdImpactCounter.fontSize = 40 + _sdImpactTier * 5;
             _sdImpactNpcHome = _sdNpcReveal.anchoredPosition;
@@ -145,14 +145,9 @@ namespace ParvaMirabilia.Presentation
             if (after >= 0)
             {
                 float fade = Mathf.Clamp01(1 - after / .30f);
-                _sdImpactCounter.text = _sdImpactDamage > 0 ? "−" + Mathf.RoundToInt(_sdImpactDamage * Mathf.Clamp01(after / .10f)) :
-                    "0";
-                _sdImpactCounter.color = new Color(accent.r, accent.g, accent.b, fade);
-                _sdImpactCounter.rectTransform.anchoredPosition = new Vector2(SDHandCenterX, 35 + (_sdReducedMotion ? 0 : after * 34));
-                _sdImpactCounter.rectTransform.localScale = Vector3.one * (_sdReducedMotion ? 1 : 1 + .22f * fade);
-                _sdImpactIncomingCounter.text = _sdEngine.LastRound.DamageToPlayer > 0 ? "−" + Mathf.RoundToInt(_sdEngine.LastRound.DamageToPlayer * Mathf.Clamp01(after / .10f)) : "";
-                _sdImpactIncomingCounter.color = new Color(SDNegative.r, SDNegative.g, SDNegative.b, fade);
-                _sdImpactIncomingCounter.rectTransform.anchoredPosition = new Vector2(SDHandCenterX, -221 - (_sdReducedMotion ? 0 : after * 10));
+                // Damage remains anchored to the affected HP bar; do not scatter a second number.
+                _sdImpactCounter.text = "";
+                _sdImpactIncomingCounter.text = "";
                 if (!_sdReducedMotion)
                 {
                     float radius = Mathf.Min(158, 36 + after * (245 + _sdImpactTier * 110));

@@ -11,15 +11,26 @@ namespace ParvaMirabilia.Presentation
         private ScoreHandEffectGraphic _sdCarryEffect;
         private float _sdCarryReturnAge = -1;
         private float _sdCarryToggleAge = -1;
-        private const float SDCarryToggleDuration = .34f;
+        private const float SDCarryToggleDuration = .56f;
 
         private void SDBuildCarryPresentation()
         {
+            // The once-per-match choice sits on the central action axis between score and HP.
+            var buttonRect = (RectTransform)_sdSaveButton.transform;
+            // The 36px player HP bar spans up to y=-260; sitting at -230 leaves the 48px
+            // carry button a clear ~6px gap above it instead of a 1px overlap.
+            buttonRect.anchoredPosition = new Vector2(0, -230);
+            buttonRect.sizeDelta = new Vector2(204, 48);
+            var label = _sdSaveButton.GetComponentInChildren<Text>();
+            label.rectTransform.anchoredPosition = new Vector2(0, 10);
+            label.rectTransform.sizeDelta = new Vector2(140, 28);
+            _sdSaveSymbol.rectTransform.anchoredPosition = new Vector2(-82, 10);
+            ((RectTransform)_sdSaveButton.transform.Find("SaveCount")).anchoredPosition = new Vector2(82, 10);
             _sdCarryRack = UiFactory.CreateRect("CarryRack", _sdSaveButton.transform,
-                new Vector2(150, 22), new Vector2(0, -15));
+                new Vector2(160, 20), new Vector2(0, -13));
             _sdCarryRackGroup = _sdCarryRack.gameObject.AddComponent<CanvasGroup>();
             _sdCarryRackGroup.blocksRaycasts = false;
-            var bed = UiFactory.CreatePanel("RackBed", _sdCarryRack, new Vector2(150, 22), Vector2.zero,
+            var bed = UiFactory.CreatePanel("RackBed", _sdCarryRack, new Vector2(160, 20), Vector2.zero,
                 new Color(0.08f, .14f, .17f, .22f));
             bed.raycastTarget = false;
             for (int i = 0; i < 5; i++)
@@ -60,7 +71,10 @@ namespace ParvaMirabilia.Presentation
             face.color = fill;
             palette.Face = fill;
             Color ink = _sdSaveButton.interactable ? SDPaperInk : SDMuted;
-            _sdSaveButton.GetComponentInChildren<Text>().color = ink;
+            var label = _sdSaveButton.GetComponentInChildren<Text>();
+            label.color = ink;
+            label.text = _sdSaveArmed ? "持越 選択中" : "持越";
+            label.fontSize = _sdSaveArmed ? 16 : 19;
             _sdSaveSymbol.color = ink;
             _sdSaveButton.transform.Find("SaveCount").GetComponent<Text>().color = ink;
             if (!returning && _sdCarryToggleAge < 0) SDDrawCarrySelection();
@@ -85,11 +99,29 @@ namespace ParvaMirabilia.Presentation
             if (!_sdReducedMotion)
             {
                 _sdCarryEffect.Clear();
-                var center = new Vector2(0, -232);
+                Vector2 center = _sdBattle.InverseTransformPoint(_sdSaveButton.transform.position);
                 Color ink = _sdSaveArmed ? SDPositive : SDRailMuted;
                 ink.a = (1 - t) * .85f;
-                _sdCarryEffect.Ring(center, 28 + ease * 52, 2.6f, ink, 30);
-                _sdCarryEffect.Ring(center, 18 + ease * 30, 1.6f, ink, 24);
+                _sdCarryEffect.Ellipse(center, 104 + ease * 12, 25 + ease * 3, 2.6f, ink, 32);
+                if (_sdSaveArmed)
+                {
+                    // A bounded set of sparks travels from the hand into the stored-hand rack.
+                    for (int i = 0; i < 20; i++)
+                    {
+                        float travel = Mathf.Clamp01((t - (i % 4) * .045f) / .82f);
+                        float arc = (i % 4) * Mathf.PI * .5f + .4f;
+                        Vector2 source = new Vector2(SDHandCenterX + (i % 5 - 2) * 132, SDPlayerDiceY) +
+                            new Vector2(Mathf.Cos(arc), Mathf.Sin(arc)) * 62;
+                        Vector2 destination = center + new Vector2((i % 5 - 2) * 27, -15);
+                        Vector2 head = Vector2.Lerp(source, destination, travel * travel);
+                        head.y += Mathf.Sin(travel * Mathf.PI) * (18 + i % 3 * 8);
+                        Vector2 direction = (destination - source).normalized;
+                        Color spark = SDPositive;
+                        spark.a = Mathf.Sin(travel * Mathf.PI) * .95f;
+                        _sdCarryEffect.Line(head - direction * (5 + 10 * travel), head, 3.5f, spark);
+                        _sdCarryEffect.Line(head + Vector2.left * 3, head + Vector2.right * 3, 2, spark);
+                    }
+                }
                 _sdCarryEffect.Flush();
                 if (_sdCarryRack != null)
                     _sdCarryRack.localScale = Vector3.one * (1 + Mathf.Sin(t * Mathf.PI) * .08f);

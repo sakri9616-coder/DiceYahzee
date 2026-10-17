@@ -229,6 +229,7 @@ namespace ParvaMirabilia.Presentation
         private Text _resultReason;
         private Text _resultStats;
         private Text _soundLabel;
+        private Slider _soundSlider;
         private Button _startButton;
 
         private void Awake()
@@ -311,6 +312,26 @@ namespace ParvaMirabilia.Presentation
             Button soundButton = UiFactory.CreateButton("SoundToggle", canvasObject.transform,
                 new Vector2(150f, 40f), new Vector2(555f, -336f), GameAudio.VolumeLabel(), 18, OnSoundToggle);
             _soundLabel = soundButton.GetComponentInChildren<Text>();
+            Image volumeTrack = UiFactory.CreatePanel("SoundVolume", canvasObject.transform,
+                new Vector2(126f, 28f), new Vector2(400f, -336f), new Color(0f, 0f, 0f, .01f));
+            volumeTrack.raycastTarget = true;
+            Image volumeBed = UiFactory.CreatePanel("Bed", volumeTrack.transform,
+                new Vector2(126f, 8f), Vector2.zero, new Color(.17f, .23f, .25f));
+            Image volumeFill = UiFactory.CreateStretchPanel("Fill", volumeBed.transform, DiceYahzeeVisuals.Brass);
+            Image volumeHandle = UiFactory.CreatePanel("Handle", volumeTrack.transform,
+                new Vector2(16f, 26f), Vector2.zero, DiceYahzeeVisuals.Parchment);
+            volumeHandle.raycastTarget = true;
+            _soundSlider = volumeTrack.gameObject.AddComponent<Slider>();
+            _soundSlider.fillRect = volumeFill.rectTransform;
+            _soundSlider.handleRect = volumeHandle.rectTransform;
+            // Slider stretches the handle vertically across its parent; cancel the
+            // original height offset so the visible thumb stays 26 px, not 54 px.
+            volumeHandle.rectTransform.sizeDelta = new Vector2(16f, -2f);
+            _soundSlider.targetGraphic = volumeHandle;
+            _soundSlider.minValue = 0f;
+            _soundSlider.maxValue = 1f;
+            _soundSlider.SetValueWithoutNotify(GameAudio.Volume);
+            _soundSlider.onValueChanged.AddListener(OnSoundSliderChanged);
 
             transform.SetParent(canvasObject.transform, false);
         }
@@ -1061,15 +1082,23 @@ namespace ParvaMirabilia.Presentation
         {
             if (_soundLabel != null)
                 _soundLabel.text = GameAudio.VolumeLabel();
+            if (_soundSlider != null)
+                _soundSlider.SetValueWithoutNotify(GameAudio.Volume);
         }
 
         private void OnSoundToggle()
         {
-            GameAudio.CycleVolume();
+            GameAudio.ToggleMute();
             RefreshSoundLabel();
 
             if (GameAudio.Volume > 0f)
                 GameAudio.Play("ui_click");
+        }
+
+        private void OnSoundSliderChanged(float value)
+        {
+            GameAudio.SetVolume(value);
+            RefreshSoundLabel();
         }
 
         private void StartMatch()
@@ -1493,6 +1522,7 @@ namespace ParvaMirabilia.Presentation
         /// </summary>
         private void Update()
         {
+            if (OnlineActive) { UpdateOnline(); return; }
             if (ScoreDuelPresentationActive)
             {
                 UpdateScoreDuelPresentation();

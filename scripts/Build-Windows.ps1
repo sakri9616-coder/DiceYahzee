@@ -30,4 +30,6 @@ foreach ($pack in @('Kenney-UIPack', 'Kenney-InputPrompts', 'Kenney-GameIcons'))
     Copy-Item -LiteralPath (Join-Path $workspace "ThirdParty\$pack\LICENSE.txt") -Destination (Join-Path $licenseOutput "$pack-CC0.txt")
 }
 Copy-Item -LiteralPath (Join-Path $workspace 'ThirdParty\DiceYahzeeAssets.json') -Destination $licenseOutput
-[ordered]@{ executable=$exe; report=$reportPath; log=$log; result=$report.result } | ConvertTo-Json | Write-Output
+$package = & (Join-Path $PSScriptRoot 'Package-Windows.ps1') -BuildDirectory $output | ConvertFrom-Json
+[ordered]@{ executable=$exe; archive=$package.archive; report=$reportPath; log=$log;
+    result=$report.result } | ConvertTo-Json | Write-Output

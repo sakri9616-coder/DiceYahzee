@@ -15,8 +15,8 @@ namespace ParvaMirabilia.Quality.Tests
     /// The readability pass made several numbers easier to read and added two bits of feedback
     /// (a carry pulse and a health-drop amount). Each of those is a visual claim, so each is
     /// measured here rather than left to the eye: font sizes, contrast edges and the colours that
-    /// separate a spent yaku from a live one. The high-durability difficulty is checked end to end
-    /// because raising enemy health touches the rules, the HUD and the title together.
+    /// separate a spent yaku from a live one. All five difficulties are checked end to end
+    /// because the enemy health pool touches the rules, the HUD and the title together.
     /// </summary>
     public sealed class ScoreDuelReadabilityTests
     {
@@ -72,16 +72,37 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(npc.GetComponent<Outline>(), Is.Not.Null);
             Assert.That(Read<Text>("_sdNpcFormula").fontSize, Is.LessThan(npc.fontSize));
 
-            foreach (string field in new[] { "_sdNpcDamage", "_sdPlayerDamage" })
-            {
-                Text damage = Read<Text>(field);
-                Assert.That(damage.fontSize, Is.GreaterThanOrEqualTo(26));
-                Assert.That(damage.fontStyle, Is.EqualTo(FontStyle.Bold));
-                Assert.That(damage.GetComponent<Outline>(), Is.Not.Null);
-            }
+            // The drop is no longer a second numeral warped onto the right end of the bar. Each bar
+            // prints one line — side, health, then the drop it is taking in red — so the claim to
+            // hold is that the line lives inside its own track, at one size, and carries the figure
+            // the core forecasts.
             var forecast = Engine.Forecast(Read<ScoreHandKind>("_sdSelectedKind"));
-            Assert.That(Read<Text>("_sdNpcDamage").text, Is.EqualTo("−" + forecast.DamageToNpc));
-            Assert.That(Read<Text>("_sdPlayerDamage").text, Is.EqualTo("−" + forecast.DamageToPlayer));
+            foreach (string field in new[] { "_sdNpcHpLabel", "_sdPlayerHpLabel" })
+            {
+                Text line = Read<Text>(field);
+                bool npcSide = field == "_sdNpcHpLabel";
+                var track = (RectTransform)Read<Image>(npcSide ? "_sdNpcBar" : "_sdPlayerBar").transform.parent;
+                Assert.That(line.transform.parent, Is.SameAs(track),
+                    "the health line belongs to the bar it drains, not beside it");
+                Assert.That(track.rect.Contains((Vector2)line.rectTransform.localPosition), Is.True,
+                    "the health line must stay within its own bar");
+                Assert.That(line.fontSize, Is.EqualTo(18), "health and its drop share one size");
+                Assert.That(line.fontStyle, Is.EqualTo(FontStyle.Normal),
+                    "a faked bolder weight was only there to survive the drain band");
+                var edge = line.GetComponent<Outline>();
+                Assert.That(edge, Is.Not.Null, "the line still needs a dark edge where it crosses the drain band");
+                Assert.That(Mathf.Abs(edge.effectDistance.x), Is.LessThanOrEqualTo(1.5f),
+                    "the edge backs the glyphs instead of fattening them");
+                Assert.That(line.text, Is.EqualTo(ScoreDuelHealthLine.Expected(
+                    npcSide ? "相手" : "あなた",
+                    npcSide ? Engine.NpcHp : Engine.PlayerHp,
+                    npcSide ? Engine.NpcMaxHp : ScoreDuel.StartingHp,
+                    npcSide ? forecast.DamageToNpc : forecast.DamageToPlayer)),
+                    "the bar prints side, health and the drop on one centred line");
+            }
+            foreach (var text in Root("_sdBattle").GetComponentsInChildren<Text>(true))
+                Assert.That(new[] { "NpcDamage", "PlayerDamage", "NpcHpDelta", "PlayerHpDelta" }, Does.Not.Contain(text.name),
+                    "no second numeral sits loose on top of a bar");
             yield return null;
         }
 
@@ -90,11 +111,15 @@ namespace ParvaMirabilia.Quality.Tests
             Press("_sdTitle", "Start");
             yield return new WaitForSeconds(1.0f);
             var pips = Read<Image[]>("_sdRollPips");
-            Assert.That(pips.Length, Is.EqualTo(2));
+            Assert.That(pips.Length, Is.EqualTo(3), "the rail reserves a slot for a Yahtzee bonus");
             Assert.That(pips[0].rectTransform.rect.width, Is.GreaterThanOrEqualTo(14f));
             Assert.That(pips[0].GetComponent<Outline>(), Is.Not.Null);
             Assert.That(pips[1].GetComponent<Outline>(), Is.Not.Null);
+            Assert.That(pips[2].GetComponent<Outline>(), Is.Not.Null);
             Assert.That(Engine.RerollsLeft, Is.EqualTo(2));
+            Assert.That(pips[0].gameObject.activeInHierarchy, Is.True);
+            Assert.That(pips[1].gameObject.activeInHierarchy, Is.True);
+            Assert.That(pips[2].gameObject.activeInHierarchy, Is.False, "a normal round hides the bonus slot");
             Assert.That(pips[0].color.a, Is.GreaterThan(.9f));
             Assert.That(pips[1].color.a, Is.GreaterThan(.9f), "both reroll slots should read as available");
 
@@ -103,8 +128,41 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(Engine.RerollsLeft, Is.EqualTo(1));
             Assert.That(pips[0].gameObject.activeInHierarchy, Is.True);
             Assert.That(pips[1].gameObject.activeInHierarchy, Is.True, "a spent slot must stay visible");
+            Assert.That(pips[2].gameObject.activeInHierarchy, Is.False, "the bonus slot stays hidden off a bonus round");
             Assert.That(pips[1].color.a, Is.GreaterThan(.3f), "the spent slot must not vanish into the table");
             Assert.That(pips[0].color.a, Is.GreaterThan(pips[1].color.a));
+            yield return null;
+        }
+
+        [UnityTest] public IEnumerator YahtzeeBonusRoundUnlocksAThirdGoldPip()
+        {
+            Press("_sdTitle", "Start");
+            yield return new WaitForSeconds(1.0f);
+            var pips = Read<Image[]>("_sdRollPips");
+            Assert.That(pips[2].gameObject.activeInHierarchy, Is.False, "round one is a normal two-reroll round");
+
+            // Commit a real formed Yahtzee so the next round earns the core's extra reroll
+            // instead of fabricating the state the HUD is meant to read.
+            for (int i = 0; i < 5; i++) Engine.PlayerDice[i] = 6;
+            Call("SDSelectCategory", (int)ScoreHandKind.Five);
+            Call("SDCommit");
+            Assert.That(Engine.LastRound.PlayerKind, Is.EqualTo(ScoreHandKind.Five));
+            Assert.That(Engine.LastRound.PlayerScore, Is.EqualTo(150));
+            Call("SDResetImpactPresentation");
+            Call("SDAdvance");
+            Assert.That(Engine.RerollsLeft, Is.EqualTo(3), "a formed Yahtzee grants a third reroll next round");
+
+            Assert.That(pips[2].gameObject.activeInHierarchy, Is.True, "the bonus round reveals the third slot");
+            Assert.That(pips[0].color.a, Is.GreaterThan(.9f));
+            Assert.That(pips[2].color.a, Is.GreaterThan(.9f), "all three bonus rerolls read as available");
+
+            yield return new WaitForSeconds(1.0f);
+            Call("SDHandleRightClick");
+            yield return null;
+            Assert.That(Engine.RerollsLeft, Is.EqualTo(2));
+            Assert.That(pips[2].gameObject.activeInHierarchy, Is.True, "a spent bonus slot must stay visible");
+            Assert.That(pips[2].color.a, Is.GreaterThan(.3f));
+            Assert.That(pips[0].color.a, Is.GreaterThan(pips[2].color.a), "the spent bonus slot recedes");
             yield return null;
         }
 
@@ -139,6 +197,8 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(Read<float>("_sdCarryToggleAge"), Is.LessThan(0));
 
             var save = Read<Button>("_sdSaveButton");
+            Assert.That(((RectTransform)save.transform).anchoredPosition.x, Is.Zero.Within(.1f),
+                "carry remains on the central action axis");
             yield return null;
             save.onClick.Invoke();
             Assert.That(Read<bool>("_sdSaveArmed"), Is.True);
@@ -160,7 +220,7 @@ namespace ParvaMirabilia.Quality.Tests
             yield return null;
         }
 
-        [UnityTest] public IEnumerator HpDropIsNamedBesideTheDrainingBar()
+        [UnityTest] public IEnumerator HpDropIsNamedInRedInsideTheDrainingBar()
         {
             Press("_sdTitle", "Start");
             yield return new WaitForSeconds(.8f);
@@ -170,30 +230,50 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(round.DamageToPlayer, Is.GreaterThan(0));
 
             Call("SDShowHpDeltas", 1f);
-            Assert.That(Read<Text>("_sdNpcHpDelta").text, Is.EqualTo("−" + round.DamageToNpc));
-            Assert.That(Read<Text>("_sdPlayerHpDelta").text, Is.EqualTo("−" + round.DamageToPlayer));
+            Text npcLine = Read<Text>("_sdNpcHpLabel");
+            Text playerLine = Read<Text>("_sdPlayerHpLabel");
+            Assert.That(npcLine.text, Does.Contain(ScoreDuelHealthLine.Red), "the drop is printed in red");
+            Assert.That(playerLine.text, Does.Contain(ScoreDuelHealthLine.Red));
+            Assert.That(ScoreDuelHealthLine.Damage(npcLine), Is.EqualTo(round.DamageToNpc));
+            Assert.That(ScoreDuelHealthLine.Damage(playerLine), Is.EqualTo(round.DamageToPlayer));
+            var npcBand = Read<Image>("_sdNpcLossBand");
+            var playerBand = Read<Image>("_sdPlayerLossBand");
+            Assert.That(npcBand.gameObject.activeSelf && playerBand.gameObject.activeSelf, Is.True, "both losses are highlighted on their bars");
+            Assert.That(npcBand.rectTransform.rect.width, Is.GreaterThan(0));
+            Assert.That(playerBand.rectTransform.rect.width, Is.GreaterThan(0));
+            Assert.That(npcBand.transform.parent, Is.EqualTo(Read<Image>("_sdNpcBar").transform.parent));
+            Assert.That(playerBand.transform.parent, Is.EqualTo(Read<Image>("_sdPlayerBar").transform.parent));
             Call("SDShowHpDeltas", 0f);
-            Assert.That(Read<Text>("_sdNpcHpDelta").text, Is.Empty);
-            Assert.That(Read<Text>("_sdPlayerHpDelta").text, Is.Empty);
+            Assert.That(ScoreDuelHealthLine.Damage(Read<Text>("_sdNpcHpLabel")), Is.Zero, "the figure leaves with the drain");
+            Assert.That(ScoreDuelHealthLine.Damage(Read<Text>("_sdPlayerHpLabel")), Is.Zero);
+            Assert.That(npcBand.gameObject.activeSelf || playerBand.gameObject.activeSelf, Is.False, "loss emphasis settles after the drain");
             yield return null;
         }
 
-        [UnityTest] public IEnumerator HighDurabilityDifficultyStartsWithMoreEnemyHealthOnScreen()
+        [UnityTest] public IEnumerator FiveDifficultiesEachStartWithTheirAdvertisedEnemyHealthOnScreen()
         {
+            string[] labels = { "入門", "初級", "中級", "上級", "超級" };
             Press("_sdTitle", "Start");
             yield return new WaitForSeconds(.8f);
             Call("SDBackToTitle");
-            Call("SDSelectOpponent", 3);
-            Assert.That(Root("_sdTitle").Find("Opponent3").GetComponentInChildren<Text>().text,
-                Is.EqualTo("上級・高耐久"));
-            Call("SDStartMatch");
-            yield return new WaitForSeconds(.8f);
+            for (int tier = 0; tier < labels.Length; tier++)
+            {
+                Call("SDSelectOpponent", tier);
+                Assert.That(Root("_sdTitle").Find("Opponent" + tier).GetComponentInChildren<Text>().text,
+                    Is.EqualTo(labels[tier]));
+                Call("SDStartMatch");
+                yield return new WaitForSeconds(.8f);
 
-            Assert.That(Engine.NpcMaxHp, Is.EqualTo(ScoreDuel.EnhancedStartingHp));
-            Assert.That(Engine.NpcHp, Is.EqualTo(ScoreDuel.EnhancedStartingHp));
-            Assert.That(Engine.PlayerHp, Is.EqualTo(ScoreDuel.StartingHp));
-            Assert.That(Read<Text>("_sdNpcHpLabel").text, Does.Contain("/ " + ScoreDuel.EnhancedStartingHp));
-            Assert.That(Read<Text>("_sdPlayerHpLabel").text, Does.Contain("/ " + ScoreDuel.StartingHp));
+                Assert.That(Engine.NpcMaxHp, Is.EqualTo(ScoreDuel.NpcHpForDifficulty(tier)));
+                Assert.That(Engine.NpcHp, Is.EqualTo(ScoreDuel.NpcHpForDifficulty(tier)));
+                Assert.That(Engine.PlayerHp, Is.EqualTo(ScoreDuel.StartingHp));
+                Assert.That(Read<Text>("_sdNpcHpLabel").text, Does.StartWith("相手 " +
+                    ScoreDuel.NpcHpForDifficulty(tier) + "/" + ScoreDuel.NpcHpForDifficulty(tier)));
+                Assert.That(Read<Text>("_sdPlayerHpLabel").text, Does.StartWith("あなた " +
+                    ScoreDuel.StartingHp + "/" + ScoreDuel.StartingHp));
+                Call("SDBackToTitle");
+            }
+            Assert.That(Read<Button[]>("_sdOpponents").Length, Is.EqualTo(5), "the title offers five difficulties");
             yield return null;
         }
 

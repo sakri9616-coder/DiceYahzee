@@ -20,7 +20,9 @@ namespace ParvaMirabilia.Presentation
         {
             // Apply before the scene loads: a hidden window can pause before MonoBehaviour.Start.
             // Ordinary player startup continues to use the project's normal pause behavior.
-            if (!Application.isEditor && System.Array.IndexOf(Environment.GetCommandLineArgs(), "-arcaneSmokeOutput") >= 0)
+            string[] args = Environment.GetCommandLineArgs();
+            if (!Application.isEditor && (System.Array.IndexOf(args, "-arcaneSmokeOutput") >= 0 ||
+                System.Array.IndexOf(args, "-diceNetHost") >= 0 || System.Array.IndexOf(args, "-diceNetJoin") >= 0))
                 Application.runInBackground = true;
         }
 
@@ -36,9 +38,11 @@ namespace ParvaMirabilia.Presentation
         {
             if (Application.isEditor) return;
             string[] args = Environment.GetCommandLineArgs();
+            string requestedOutput = null;
             for (int i = 0; i + 1 < args.Length; i++)
-                if (args[i] == "-arcaneSmokeOutput") _smokeOutput = Path.GetFullPath(args[i + 1]);
-            if (_smokeOutput == null) return;
+                if (args[i] == "-arcaneSmokeOutput") requestedOutput = Path.GetFullPath(args[i + 1]);
+            if (requestedOutput == null) return;
+            _smokeOutput = requestedOutput;
             Directory.CreateDirectory(_smokeOutput);
             Application.logMessageReceived += ObserveSmokeError;
             StartCoroutine(SmokeGuard(ScoreDuelPresentationActive ? ScoreDuelPlayerSmoke() : PlayerSmoke()));

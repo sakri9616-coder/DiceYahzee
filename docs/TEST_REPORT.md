@@ -1,7 +1,7 @@
 # TEST REPORT — Parva Mirabilia Dice
 
-対象プロジェクト: `D:\MimoGame\ParvaMirabiliaDice`（Unity 6000.3.25f1 / 現行プロダクト名 "Dice Duel"）
-最終更新: 2026-10-11
+対象プロジェクト: `D:\MimoGame\ParvaMirabiliaDice`（Unity 6000.3.25f1 / 現行プロダクト名 "DiceYahzee"）
+最終更新: 2026-10-17
 
 このレポートは「実施したこと」「結果」「実施しなかったこと」を分けて記述する。すべての数値は一次ファイル（`D:\MimoGame\logs\*.xml` / `*.json` / `ParvaMirabiliaDice\Playthrough\*.png`）から取り出した実測値である。
 
@@ -1119,3 +1119,96 @@ Windows実行版 `Builds/Windows-20261012-170635-498/DiceYahzee.exe` は、ウ�
 途中の全PlayMode実行 `logs/validation-playmode-20261012-215743-161.xml` は80件中79件成功。Aoboshi Oneの大きな得点の行高が表示枠を12px超えた1件を修正した。修正後の `logs/validation-playmode-20261012-220451-871.xml` は80/80成功。成立通知の位置と役名の復帰を確認するテストを追加し、最終ソースの `logs/validation-playmode-20261012-221333-428.xml` は81/81成功、失敗・スキップ0、終了コード0。
 
 最新Windows実行版 `Builds/Windows-20261012-221148-841/DiceYahzee.exe` はUnity 6000.3.25f1でSucceeded、エラー0・警告0。`logs/player-v092-rail-delivery/player-smoke.json` はpassed=true、398チェック、errors=[]、実行版終了コード0、PNG48枚。画面保存には4:3、成立通知、持越、マウスガイド、攻撃4段階を含む。今回Web版は作成していない。自動入力とローカル画面の確認は、物理マウスでの操作感や他端末での見え方までは示さない。
+## 21. 0.10.0 — 招待コードによる2人対戦、持越と被害表示
+
+Unity 6000.3.25f1に Multiplayer Services 2.4.0 と Netcode for GameObjects 2.13.3 を導入し、Unity Cloudの `DiceYahzee` プロジェクト（`499171cc-793c-4d06-999d-d094b12838f4`）へ紐付けた。匿名認証、非公開2人Relayセッション、招待コード参加を使用する。専用サーバー、アカウント登録、自動マッチング、ランキングは追加していない。
+
+ルールはUnity非依存の `VersusDuel` に分けた。ホストが乱数・手の正当性・同時ダメージ・勝敗を決め、各要求の接続元、ラウンド、操作番号、保持、残り振り直し、役使用、持越回数を検査する。各ロールの出目は相手にも即時公開し、提出した役・持越・得点と役使用だけを双方提出まで伏せる。提出後の重複操作や手番外操作は状態を進めない。両者が結果画面をクリックした後に次ラウンドへ進み、接続が切れれば対戦を中断する。既存CPU戦を維持し、持越時は使用者だけが共通軽減を失い、生存時だけ出目を引き継ぐ計算へ揃えた。
+
+オンライン画面は相手の使用役を左、自分の選択役を右、出目と得点を中央に配置した。役をホイールでも変更でき、中央の持越は選択時に粒子が集まる。攻撃はダイスの交差に衝撃輪と放射線を重ね、ダメージによる4段階で範囲・本数・太さを変える。HP減少量は両バーの左へ集め、CPU戦でも従来の右下表示を廃止した。CPU戦の中央持越と得点の間隔、HPバー周辺の実減少表示も調整した。
+
+最終ソースのPlayMode全回帰 `logs/validation-playmode-20261016-163250-206.xml` は87/87成功、失敗・スキップ0、終了コード0。Coreの最終変更後に行ったEditMode全回帰 `logs/validation-editmode-20261016-021318-034.xml` は138/138成功で、以後Coreには変更していない。制限付き実行ではUnity Editorのローカルソケットとライセンス初期化が拒否され結果XMLが出なかったため、通常権限で再実行した上記結果を採用する。
+
+最終Windows版は `Builds/Windows-20261016-163627-237/DiceYahzee.exe`。非開発版、Direct3D11、ビルドSucceeded、エラー0・警告1。警告はUnity ServicesのEditor側リンク案内であり、ProjectSettingsのIDは設定済みで、下記の実Relay接続は成功した。`scripts/Build-Windows.ps1` は今後も実行フォルダーと同名ZIPを作り、実行に必要な `MonoBleedingEdge` を検査する。
+
+最終版の2プロセス実Relay対戦 `logs/network-duel-20261016-163749-211/` は招待コード参加から勝敗まで完了し、18状態のラウンド・HP・勝敗が一致、双方終了コード0。`host-online-impact.png` で最弱段階の衝撃輪とHPバー左の被害数値、`host-online-resolved.png` で攻撃後の画面を目視確認した。ゲスト切断 `logs/network-duel-20261016-163949-911-disconnect/` ではホスト、ホスト切断 `logs/network-duel-20261016-164053-542-host-disconnect/` ではゲストが中断を記録して終了コード3となった。
+
+配布用 `Builds/Windows-20261016-163627-237.zip` は `MonoBleedingEdge` の20ファイルとライセンスを含み、DoNotShipのBurstデバッグ情報を含まない。展開先 `logs/portable-v010-release/` から起動した実行版はその場所の `MonoBleedingEdge/etc` を読み込み、`smoke/player-smoke.json` で398チェック成功、errors=[]、終了コード0。旧 `Builds` 直下の `MonoBleedingEdge` は同じ階層の旧実行版が使うため保持した。今回Web版は作成していない。
+
+検証した二つのクライアントは同一Windows PC上の独立プロセスで、実Relayサービスへ接続した。異なるPC・回線や長時間の対人プレイ、初見の操作理解と販売品質までは測定していない。
+
+## 22. 0.10.0 入力修正と連続音量調整
+
+オンラインの招待コード欄は、共通UI工場が背景画像のクリック判定を無効にしていたため、表示されていても選択できなかった。入力欄だけ判定を有効にした。PlayMode回帰では実CanvasのRaycastが入力欄に届くこと、クリック後のフォーカス、文字入力とプレースホルダー消去を確認した。実行版の2クライアント検証もコードの直接代入をやめ、画面の入力欄をクリックして文字イベントで入力する手順へ変更した。
+
+音量は4段階ボタンを連続スライダーへ置き換え、スピーカーアイコンを消音・復帰に変更した。従来の保存済み段階設定を読み取ってから新しい連続値へ移行し、変更値を保存する。BGMの最大ゲインは0.45から0.315へ下げ、効果音側の最大ゲインは維持した。音量バーはオンライン画面でも表示し、実画面でつまみの高さを修正した。
+
+全PlayMode回帰 `logs/validation-playmode-20261016-173844-708.xml` は88/88成功。最終つまみ調整前のソースであり、最終版のWindowsビルドと実Relay対戦は下記で別途検証した。最終Windows版 `Builds/Windows-20261016-181745-995/DiceYahzee.exe` はビルドSucceeded、エラー0・警告1。`Builds/Windows-20261016-181745-995.zip` は実行ファイルと `MonoBleedingEdge` 20ファイルを含む。`logs/network-duel-20261016-182230-943/` では招待コードを入力欄から入力して参加し、勝敗確定まで24状態のラウンド・HP・勝敗が一致、両者終了コード0。`guest-online-lobby.png` で修正後の音量バーを目視確認した。検証用コピーのUnity参照キャッシュが一時的に破損し、途中2回のビルドでUI・Audio・NUnit参照が欠けたため、最終版は元プロジェクトからビルドした。
+
+最終ソースでの追加PlayMode個別再実行 `logs/validation-playmode-20261016-182515-172.log` は結果XMLを生成できず、Unityのライセンス応答タイムアウトとUnity UI・AsistBridgeの参照欠落で停止した。成功件数には含めない。実行版での入力、画面、再生音量、対戦完走は上記の別経路で検証した。
+
+## 23. 対戦バランス再調整とオンライン対戦の進行（0.10.0 / 2026-10-17）
+
+決定済みの数値へコアと画面を揃えた。HPは双方300、NPCは難易度別に250／350／400／450／550とし、難易度の差はHPだけに置く。得点は `floor((20＋出目合計)×倍率)` で、倍率は `ScoreDuel.cs` の `Quarters = {6,8,8,10,8,12,10,12,4}`（ペア1.5／ツーペア2／スリー2／フルハウス2.5／小ストレート2／フォーカインド3／大ストレート2.5／ヤッツィー3／チャンス1）。ヤッツィー成立だけは倍率を使わず150点固定で、成立した翌ラウンドは振り直しが1回増える。この1回は毎ラウンド独立に取り直せ、増加先の上限は3回。持越は対局中1回・人間のみで、被害デメリットを廃止して通常の共通軽減（`A=floor(min(P,N)/2)`）だけを受ける。チャンス宣言は双方向の式 `dnp,dpl = N−A, P−A` で被害の受け手を入れ替え、持越と同じラウンドに併用できる。役の欄は9種類を使い切った側だけが次ラウンドに再使用でき、NPCは難易度によらず上級（Expert）の期待値方針で打つ。`Balanced`／`Aggressive`／`Careful` は拡張用に残したまま画面から外した。
+
+画面はHPバーを厚さ18から36へ広げ、HP文字をバーの中央、被ダメージの数値を同じバーの右端へ置いた（この右端表示は§24で1行へ統合した）。減少量はバー内で左から伸びる帯と数字の両方で示し、CPU戦では従来のHPバー外の表示を廃止した。同時KOの同値は結果画面で「奇跡」だけを112pxの黄色（`SDMiracle` = 255,216,82）で表示する。チャンスを選ぶと中央に「チャンス：被害の受け手を入れ替え」を出し、選択を外すと消える。振り直しの残りは点3個で示し、通常ラウンドは2個だけ点灯する。
+
+オンライン対戦はUnity非依存の `VersusDuel` が進行を持つ。ラウンド開始の出目は両者へ公開し、振り直しの最中は相手の出目を開始時の値で伏せ、両者の振り直しが終わった時点で最終の出目をそろって公開する。提出した役と持越は双方の提出まで伏せる。役の決定は従来どおりの下引き・リリースで、自分が提出した後は相手が提出するまで両者のダイスが発射前の姿勢のまま振動して待機する。提出後の重複した操作や手番外の操作では状態を進めない。
+
+引き継ぎ時に直した点を示す。前回の作業はHP文字を左寄せ（x=−106、`MiddleLeft`）へ動かした一方、PlayModeテストとスモークが中央配置（x=0、`MiddleCenter`）を要求しており、`ScoreDuelPresentationTests.SymmetricRoleRailsLeaveTheCentralPlayClear_AndRecordTheEnemiesActualUsedRole` の1件だけが失敗した状態で止まっていた。HP文字をバー中央・被ダメージをバー右端へ戻して解消した。`scripts/Package-Windows.ps1` はWindows PowerShell 5.1で `[System.IO.Compression.ZipArchiveMode]` を解決できず、ビルド成功後のZIP作成だけが失敗していた。基底の `System.IO.Compression` を先に読み込むよう直し、`Builds/Windows-20261017-021036-927.zip`（183エントリ、43,014,139バイト）を作成できた。オンライン画面には逆転の提示が無かったため、チャンス宣言中と入れ替え成立の直後に一行を出す `_onlineChanceCue` を追加し、相手の提出待ちのダイス振動を左右4.6px・上下3.0pxの二軸へ強めた。
+
+EditMode全回帰 `logs/validation-editmode-20261017-020432-616.xml` は157/157成功、失敗0・スキップ0。PlayMode全回帰 `logs/validation-playmode-20261017-021723-404.xml` は91/91成功、失敗0・スキップ0（チャンスの告知を確かめる `ChanceDeclarationNamesTheDamageSwapWhileItCanStillBeChanged` を1件追加した）。実行版は `Builds/Windows-20261017-021036-927/DiceYahzee.exe` で、`build-report.json` はSucceeded、errors=0、warnings=1、非Development。実行版スモーク `logs/player-balance-20261017/smoke/player-smoke.json` は passed=true、398チェック、errors=[]、終了コード0。このうち「NpcHp is centered inside the thicker health bar」「PlayerHp is centered inside the thicker health bar」「round N replaces both forecasts with HP-bar damage during impact」「round N uses exactly the displayed clash damage」が今回の要求に対応する。`hp-damage.png` で、上段「相手 244 / 250」と下段「あなた 287 / 300」がバーの中央、被ダメージ「−35」「−80」が同じバー内の右端に描かれることを目視で確認した。チャンスの被害入れ替えそのものの意味はEditModeの `ScoreDuelTests.ChanceReversesDamageAndCanBeCombinedWithCarry` が確認する。
+
+実施しなかったことを示す。オンラインの2プロセス実Relay対戦は今回は実行しておらず（§24で実施した）、`_onlineChanceCue` と待機中の振動は実接続で確認していない。Web版は作成していない。引き分け「奇跡」はCPU戦・オンライン戦とも表示経路が三項演算子1か所だけで、自動テストでは覆っていない（出現率が0.0〜0.3%で、既存の方針どおりテストが本番の状態を上書きしないため）。ヤッツィーの翌ラウンド+1は上限3回のままで、4回以上には積み上げない。異なるPC・回線での対人プレイと初見の操作理解は測っていない。
+
+## 24. HPバーの被害表記を1行へ統合（0.10.0 / 2026-10-17）
+
+「被ダメージの表記方法が汚い」「強引な文字拡大で解像度が落ちている」という指摘を受け、各バーの被害を `あなた 350/350 −50` の1行（−50は赤）へ統合した。
+
+従来は1本のバーに文字が2組あった。中央のHP文字（18px・`MiddleCenter`）と、右端の被害数字（26px・太字・`effectDistance(2,−2)` の濃い縁取り）である。被害は予測用（`_sdNpcDamage`／`_sdPlayerDamage`）と実減少用（`_sdNpcHpDelta`／`_sdPlayerHpDelta`）で別々のオブジェクトを持ち、同じバー内の右端x=222に重ねていた。拡大と太字は、排水中にクリーム色へ変わる帯の上でも数字を読ませるための措置だったが、結果として文字と縁取りが二重になり、拡大で輪郭が崩れていた。`logs/player-balance-20261017/smoke/hp-damage.png` でも、被ダメージの数字がクリーム色の減少帯と同系色の上に濃い縁取りだけで立っていた。
+
+統合後は1本のバーにつき文字は1つだけ。`SDHealthLine(side, hp, max, damage)` が「側の名前・現在HP・上限」に続けて、被害があるときだけ `<color=#C1272D>−N</color>` を足す。`damage<=0` のときは数字そのものを出さない。寸法はHPと同じ18px、太字なし、既存の控えめな `Outline`（`effectDistance(1,−1)`）だけを残した。表示HPと表示被害はフィールドで保持し（`_sdPlayerHpShown`／`_sdNpcHpShown`／`_sdPlayerDamageShown`／`_sdNpcDamageShown`）、`SDApplyHpLines()` が両方の行を書き直す。旧4オブジェクトと `SDBuildInBarDamage`／`SDSetHpDelta` は削除した。
+
+被害の枠は同時に1つの持ち主だけが書く。HPが減っている間は排水（`SDShowHpDeltas`）が、役を選んでいる間は予測（`SDRefreshHud`）が書く。従来は両者が別々の数字へ書いていたため、同じバーに2つの数字が並び得た。排水中の数字は減少量で固定し、バーが追いつくのと同じ行から消える。敵の接触（`SDImpactContactDelay`＝0.30秒）までは数字を出さず、攻撃が届いた時点で現れる。
+
+色は実測で選んだ。明るい珊瑚（`#FF5C54`）は相対輝度で敵バーの塗りに対して1.13:1、プレイヤーの青緑に対して1.24:1しかなく、色相差であって可読差ではなかった。現在の `SDDamageInk`＝(193,39,45)＝`#C1272D` は同じ条件で1.56:1／2.25:1、排水帯の上では2.77〜3.04:1になり、隣に並ぶHP文字（1.60〜3.44:1）と同等以上になる。測定は `logs/hp-visual-20261017/` の拡大画像から被害の文字だけを抽出し、相対輝度から算出した。
+
+オンライン画面も同じ1行へ揃えた（`SDSetOnlineHpLines`）。右端に固定していた被害表示と24pxの太字は削除し、`Outline` は1へ弱めた。
+
+検証は次のとおり。EditMode全回帰 `logs/validation-editmode-20261017-225806-849.xml` は157/157成功、失敗0・スキップ0。PlayMode全回帰 `logs/validation-playmode-20261017-225838-637.xml` は91/91成功、失敗0・スキップ0。`ScoreDuelReadabilityTests.LargeScoresAndDamageHaveAContrastEdgeAndFitTheirBox` は、26px・太字・濃い縁取りを要求していた旧仕様から、バー内1行・18px・太字なし・赤セグメントの検証へ書き換え、`HpDropIsNamedBesideTheDrainingBar` は `HpDropIsNamedInRedInsideTheDrainingBar` とした。行の書式と赤は `Assets/Tests/PlayMode/ScoreDuelHealthLine.cs` が1か所で持ち、各テストは描かれた文字列から被害を読み戻して照合する。実行版は `Builds/Windows-20261017-230152-294/DiceYahzee.exe`（`build-report.json` はSucceeded、errors=0）。実行版スモークは1280×720 `logs/hp-visual-20261017/smoke-1280d/player-smoke.json` と1440×810 `logs/hp-visual-20261017/smoke-1440/player-smoke.json` の両方が passed=true、398チェック、errors=[]、終了コード0。うち「NpcHp/PlayerHp is centered inside the thicker health bar」と「round N retires both forecasts from the bars for the clash that actually lands」が今回の要求に対応する。
+
+目視は拡大画像で行った。`logs/hp-visual-20261017/crop-formed2/` で「相手 250/250 −35」「あなた 300/300 −80」、`crop-damage2/` で排水中の「あなた 287/300 −80」、`crop-1440-damage/` で1440×810の同画面を確認した。いずれも文字はバーの中央に1行、被害だけが赤で、拡大も太字もない。
+
+オンラインは実Relayの2プロセス対戦 `logs/network-duel-20261017-231856-159/` を実行し、招待コード参加から勝敗まで完了、33状態が一致、双方終了コード0。`guest-online-impact.png` の拡大から、オンライン画面も「あなた 295/300 −27」「相手 295/300 −30」の同じ1行で表示されることを確認した。
+
+同じ2プロセス対戦を `-nographics` で走らせると、ゲストが招待コード欄をレイキャストでクリックできないとして2回とも終了コード2で止まった。`Builds/Windows-20261017-021036-927`（今回の表記変更前のビルド）でも同じ失敗が出るため、この失敗は今回の変更とは無関係の既存事象である。今回の対戦確認はVisual（実グラフィックス）で行った。
+
+実施しなかったことを示す。Web版は作成していない。引き分け「奇跡」の表示経路はCPU戦・オンライン戦とも三項演算子1か所で、自動テストでは覆っていない。ヤッツィーの翌ラウンド+1の上限3回は変更していない。異なるPC・回線での対人プレイと初見の操作理解は測っていない。`-nographics` のオンライン対戦は上記の理由で未解決のまま残した。
+
+## 25. `-nographics` のゲスト停止を解消し、実装を整理（0.10.0 / 2026-10-17）
+
+§24で未解決とした `-nographics` の招待コード欄クリック失敗を解消した。原因は検証経路の待機順序である。スモークのゲストは実グラフィックスのときロビー撮影の `WaitForEndOfFrame` を1回挟むため、画面生成後に最低1回のCanvasレイアウトが走ってからレイキャストする。graphicsがNullのときはこの待機が丸ごとスキップされ、`OpenOnline()` を呼んだ同フレーム内で `EventSystem.RaycastAll` を実行する。その時点では新しいオンライン画面に画面ジオメトリがまだ無く、ヒットが0件になって終了コード2で止まる。同じUIが実グラフィックスでは完走する（§24のVisual実接続）ため、ゲーム本体の入力処理ではなくスモーク経路の補正として直した。
+
+修正は `GameFlow.Online.cs` の `OnlineSmoke()` ゲスト部で、レイキャストの前に `yield return null; Canvas.ForceUpdateCanvases();` を置いて、headlessでもレイアウトを明示的に通す。失敗時のトレースに `screen=WxH point=… hits=…` の診断を追加し、今後同じ場所で止まったときに画面サイズか座標かを区別できるようにした。
+
+合わせて実装を整理した。ゲームの見た目と動作は変わらない。(1) 両手のダイスの定位置（ビルド・提出待ちの振動・発射の3か所に同じ座標式が書かれていた）を `OnlineDieHome(index, mine)` の1か所へ集約した。(2) 確定ラウンドの被害読み出し（予測時と結論時の2か所で同じ判定を書いていた）を `OnlineReceivedDamage(resolved, side)` へ集約した。(3) `RefreshOnline` の選択役の採点は得点欄のために評価していた値を一度だけ作り、9役の一覧評価と混同されない名前へ持ち上げた。(4) Coreの `ScoreDuel.NpcHpForDifficulty` はswitch5分岐から表 `{250,350,400,450,550}` の参照へ替えた。数値・例外条件は不変である。
+
+検証は次のとおり。修正前の再現として、直近ビルド `Builds/Windows-20261017-230152-294` のnographics2プロセス対戦 `logs/network-duel-20261017-234229-049/` で、ゲストが `invite field cannot be clicked` で終了コード2となった。修正込みの中間ビルド `Builds/Windows-20261017-234500-961` は、nographicsで `logs/network-duel-20261017-234819-301/`、Visualで `logs/network-duel-20261017-234952-830/` のいずれも招待コード参加から勝敗まで完走し（状態同期30／33、双方終了コード0）、headless専用の補正が実グラフィックス側を壊していないことを確認した。整理後の全ソースに対してEditMode全回帰 `logs/validation-editmode-20261017-234832-998.xml` は157/157成功、PlayMode全回帰 `logs/validation-playmode-20261017-234939-418.xml` は91/91成功、失敗0・スキップ0。確定ビルド `Builds/Windows-20261017-234939-431/DiceYahzee.exe`（`build-report.json` はSucceeded、errors=0、同名ZIPあり）で、nographics2プロセス対戦 `logs/network-duel-20261017-235121-381/` は36状態のラウンド・HP・勝敗が一致して完走、Visual `logs/network-duel-20261017-235121-351/` は39状態で完走し、いずれも照合スクリプトの「ゲストは招待コード欄をレイキャストでクリックしてから文字イベントで入力した」アサーションを含めて終了コード0である。
+
+実施しなかったことを示す。引き分け「奇跡」の表示経路は§23・§24と同じく自動テストで覆っていない。Web版は作成していない。音量・BGM・難易度HPの数値などの挙動は変更していない。本節の修正は検証経路と内部整理が対象であり、ルール数値・対戦ロジック・入力仕様の変更は含まない。異なるPC・回線での対人プレイ、初見の操作理解、`-nographics` 以外のヘッドレス環境（Linux等）は測っていない。
+
+## 26. オンラインの告知と「奇跡」を自動テストへ移し、記録を実接続で証跡化する（0.10.0 / 2026-10-18）
+
+§25まで残っていた3件の未確認を解消した。(1) オンラインで `_onlineChanceCue`（宣言中の告知と確定後の「入れ替わった」）が実接続で確認されていなかった。(2) 引き分け「奇跡」はCPU戦・オンライン戦とも三項演算子1か所で、自動テストで覆っていないとされていた。(3) 実対戦の記録に役の宣言が残らず、あとから「チャンスが起きたか」が分からなかった。方針は既存の「テストが本番の状態を上書きしない」を維持したまま、テスト内で自分のエンジンと証跡用の固定出目を作ることである。
+
+コアのテストを1件追加した `Assets/Tests/EditMode/VersusDuelTests.cs`。`IdenticalKnockoutDamageIsTheMiracleDrawWhileAnyMismatchDecides` は検証用に両席の生ダイスを揃え、同時KOの生HPが等しいとき Winner が必ず2になること（次ラウンドが進まないこと）、1目でも違うと高い生HPの側の勝ちになることを確かめる。CPU戦の同点規則そのものは既存の `ScoreDuelTests` が `Outcome.Result == MatchResult.Draw` を直接確認していたため、新規はオンラインエンジンに絞った。
+
+表示のテストは新ファイル `Assets/Tests/PlayMode/OnlineResultDisplayTests.cs` に2件。各テストは本物の `VersusDuel` を進め、ホストの実際の直列化 `OnlineJson` から出し、実際の受信経路 `ReceiveOnlineSnapshot` で届けたスナップショットを、新しく作った画面へ流し込む。これでネットワーク指定層（`OnlineProtocolTests` が別に確認する）以外の全行程が実物である。`ChanceCueNamesTheSwapWhileDeclaredAndAgainOnceItLands` は、何も宣言していない静かなラウンドで告知が消えていること、自分の宣言で「チャンス：被害の受け手を入れ替える」が出ること、確定後は「被害の受け手が入れ替わった」へ変わること、双方宣言では告知が消えることを確認する。`EqualKnockoutDamageShowsTheMiracleTitleAndMismatchDoesNot` は両席のダイスを検証用に固定して同点の同時KOを作り、「奇跡」が活性化する・状態行が「引き分け」になる・告知は消えることを、1目の違いで勝敗が分かれた対戦では「奇跡」が非活性・状態行が「あなたの勝利」になることを確認する。
+
+実対戦の記録を証跡化した。スモークの状態行は、役が解決済みで見えるようになった確定時に `kind=自分,相手` を追記する。さらにスモーク経路内だけで、ゲストは初回ラウンドの提出だけを Chance に変える。両ボットとも先頭の未使用役を順に出していたため、機械的宣言では非対称なChanceが永遠に起きなかったためである。これで以後の全てのRelay対戦は、告知・入れ替え・宣言の非対称をログとして残し、実接続で自動的に検証される。
+
+軽微な整理も行った。(1) 音量スライダーは1揺れで数十回 `OnValueChanged` が発火し、毎回 `PlayerPrefs.Save()` が走っていた。値自体は即座に書き込み、`Save` はスライダーが静止してから1度だけ保存されるデバウンス方式へ替えた。挙動は既定値の読み書きを含めて不変である。(2) `RefreshOnline` が毎スナップショットで10面のダイス GameObject を名前検索していたのを、画面構築時に得た `RectTransform` のキャッシュへ替えた。(3) `GameFlow.Online.cs` の末尾の空行を整えた。動作は変えない。
+
+検証は次のとおり。全構成でのEditMode全回帰 `logs/validation-editmode-20261018-003317-203.xml` は158/158成功（奇跡のコア規則1件追加）。PlayMode全回帰 `logs/validation-playmode-20261018-003355-084.xml` は93/93成功（オンラインの表示2件追加）。最初の確認ビルド `Builds/Windows-20261018-002545-246`（`build-report.json` はSucceeded、errors=0、同名ZIPあり）で、`kind=` 追記直後の基本動作としてnographics2プロセス対戦 `logs/network-duel-20261018-002640-717/` は36状態が一致して完走した（この時点では両ボットが同役同時提出のため `kind=0,0 … 8,8` が記録されるだけ）。Chanceの非対称宣言を入れた確定ビルド `Builds/Windows-20261018-003037-713`（Succeeded、errors=0、ZIPあり）で、同条件の対戦 `logs/network-duel-20261018-003131-233/` は39状態が一致して完走した。ラウンド1の確定行はホスト視点 `kind=0,8`・ゲスト視点 `kind=8,0` で、HPが `hp=266,279` となり、同役同時提出だった先の対戦 `hp=266,273` と比べ入れ替え分の被害差が読み取れる。13ラウンドで勝敗まで進み、双方終了コード0。なおこの夜の作業中、対話モードのUnityエディタが本プロジェクトを開いたままだったため、2件のビルドはrobocopy同期後の検証コピー `.validation\ParvaMirabiliaDice` から行った。EditMode・PlayModeの実行も同一のコピーに対してである。
+
+実施しなかったことを示す。ルールの数値・当選条件・UIの見た目は変更していない。本節のトレース追加とChance宣言はスモーク経路限定であり、人が本番の対戦で出す役には作用しない。一般プレイヤーが自身で選ぶChance宣言の頻度は人の手に依存するため測定していない。Web版は作成していない。異なるPC・回線での対人プレイ、初見の操作理解、`-nographics` 以外のヘッドレス環境（Linux等）は測っていない。音量保存のデバウンスはスライダー静止後0.5秒で1度だけ書き切る実装で、0.25秒ごと静止を確認する。保存待ちの間にプロセスが落ちると直前の値がPreferenceへ残らないことがあるが、ゲーム側は起動時に読むだけで差し戻りは操作に影響しないと判断した。

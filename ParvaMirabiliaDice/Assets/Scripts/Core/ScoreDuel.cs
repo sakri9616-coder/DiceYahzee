@@ -47,19 +47,13 @@ namespace ParvaMirabilia.Core
         public readonly int NpcScore;
         public readonly int DamageToPlayer;
         public readonly int DamageToNpc;
-        public ScoreForecast(int score, int npcScore, bool saved = false)
+        public readonly bool IsReversed;
+        public ScoreForecast(int score, int npcScore, bool saved = false, bool reversed = false)
         {
-            Score = score; NpcScore = npcScore;
-            if (saved)
-            {
-                DamageToPlayer = npcScore; DamageToNpc = score;
-            }
-            else
-            {
-                int commonAbsorption = Math.Min(score, npcScore) / 2;
-                DamageToPlayer = npcScore - commonAbsorption;
-                DamageToNpc = score - commonAbsorption;
-            }
+            Score = score; NpcScore = npcScore; IsReversed = reversed;
+            int commonAbsorption = Math.Min(score, npcScore) / 2;
+            DamageToPlayer = (reversed ? score : npcScore) - commonAbsorption;
+            DamageToNpc = (reversed ? npcScore : score) - commonAbsorption;
         }
     }
 
@@ -89,6 +83,7 @@ namespace ParvaMirabilia.Core
         public int NpcBaseScore { get; internal set; }
         public int NpcBonusScore { get; internal set; }
         public bool IsSaved { get; internal set; }
+        public bool IsReversed { get; internal set; }
         public int DamageToPlayer { get; internal set; }
         public int DamageToNpc { get; internal set; }
         public int PlayerRawHpAfter { get; internal set; }
@@ -110,7 +105,7 @@ namespace ParvaMirabilia.Core
             "ペア", "ツーペア", "スリーカインド", "フルハウス", "小ストレート",
             "フォーカインド", "大ストレート", "ヤッツィー", "チャンス"
         };
-        private static readonly int[] Quarters = { 5, 6, 7, 8, 8, 10, 10, 13, 4 };
+        private static readonly int[] Quarters = { 6, 8, 8, 10, 8, 12, 10, 12, 4 };
         // Ordered-hand lookup preserves the exact matching dice masks as well as scores.
         // It also bounds NPC planning: no recursive search or allocation per simulated hand.
         private static readonly ScoreOffer[] Table = BuildTable();
@@ -159,7 +154,7 @@ namespace ParvaMirabilia.Core
             Encode(dice);
             if (available == null || available.Length != HandCount)
                 throw new ArgumentException("未使用の役を9個指定してください", nameof(available));
-            if (rerollsLeft < 0 || rerollsLeft > 2) throw new ArgumentOutOfRangeException(nameof(rerollsLeft));
+            if (rerollsLeft < 0 || rerollsLeft > 3) throw new ArgumentOutOfRangeException(nameof(rerollsLeft));
             int mask = rerollsLeft == 0 ? 31 : ScoreHoldPolicyExact.Plan(dice, available, rerollsLeft, round, personality);
             var held = new bool[5];
             for (int i = 0; i < 5; i++) held[i] = (mask & (1 << i)) != 0;
@@ -237,7 +232,7 @@ namespace ParvaMirabilia.Core
         private static void Add(ScoreOffer[] table, int offset, ScoreHandKind kind, int mask, int total)
         {
             bool formed = mask != 0;
-            table[offset + (int)kind] = new ScoreOffer(kind, (BasePoints + total) * (formed ? Quarters[(int)kind] : 4) / 4, mask, formed, true, BasePoints + total);
+            table[offset + (int)kind] = new ScoreOffer(kind, kind == ScoreHandKind.Five && formed ? 150 : (BasePoints + total) * (formed ? Quarters[(int)kind] : 4) / 4, mask, formed, true, BasePoints + total);
         }
 
         private static int StraightMask(int[] counts, int[] masks, int length)
@@ -316,16 +311,26 @@ namespace ParvaMirabilia.Core
         private int[] _savedDice;
         private bool[] _savedHeld;
         private int _npcRerollsUsed;
+        private int _playerRoundRerolls;
+        private bool _playerNextRerollBonus, _npcNextRerollBonus;
         private IReadOnlyList<NpcRollSnapshot> _preparedNpcRolls;
 
-        public const int StartingHp = 240;
+        public const int StartingHp = 300;
+        public const int DefaultNpcStartingHp = 250;
+        /// <summary>Difficulty only changes where the NPC starts, not the rules it plays by.</summary>
+        private static readonly int[] NpcHpByTier = { 250, 350, 400, 450, 550 };
+        public static int NpcHpForDifficulty(int tier)
+        {
+            if (tier < 0 || tier >= NpcHpByTier.Length) throw new ArgumentOutOfRangeException(nameof(tier));
+            return NpcHpByTier[tier];
+        }
 
         /// <summary>
         /// Enemy-only health for the high-durability difficulty. The player keeps
         /// <see cref="StartingHp"/>, so the same contested rules run from a deliberately worse
         /// position rather than from different rules.
         /// </summary>
-        public const int EnhancedStartingHp = 360;
+        public const int EnhancedStartingHp = 550;
 
         public const int MinimumNormalDamage = 13;
         // This bound guards simulations, not gameplay. No turn limit or HP judgement is applied.
@@ -371,7 +376,7 @@ namespace ParvaMirabilia.Core
         }
 
         public ScoreDuel(int seed, NpcPersonality personality = NpcPersonality.Balanced,
-            int npcStartingHp = StartingHp)
+            int npcStartingHp = DefaultNpcStartingHp)
         {
             if (!Enum.IsDefined(typeof(NpcPersonality), personality)) throw new ArgumentOutOfRangeException(nameof(personality));
             if (npcStartingHp <= 0) throw new ArgumentOutOfRangeException(nameof(npcStartingHp));
@@ -391,6 +396,7 @@ namespace ParvaMirabilia.Core
             Array.Clear(_npcUsed, 0, _npcUsed.Length);
             _history.Clear(); Outcome = null; LastRound = null;
             SavedHandUsed = false; _savedDice = null; _savedHeld = null;
+            _playerNextRerollBonus = _npcNextRerollBonus = false;
             PlayerHp = StartingHp; NpcHp = NpcStartingHp; Round = 1;
             PrepareRound();
         }
@@ -435,7 +441,7 @@ namespace ParvaMirabilia.Core
             int index = ScoreRules.CheckKind(kind);
             if (_playerUsed[index]) throw new InvalidOperationException("その役はこの対戦で使用済みです");
             if (saved && SavedHandUsed) throw new InvalidOperationException("出目の保存はこの対戦で1回だけです");
-            return new ScoreForecast(ScoreRules.Evaluate(kind, PlayerDice).Score, Intent.Score, saved);
+            return new ScoreForecast(ScoreRules.Evaluate(kind, PlayerDice).Score, Intent.Score, saved, kind == ScoreHandKind.Chance);
         }
 
         public ScoreRound Commit(ScoreHandKind kind)
@@ -457,6 +463,8 @@ namespace ParvaMirabilia.Core
             var offer = ScoreRules.Evaluate(kind, PlayerDice);
             _playerUsed[(int)kind] = true;
             _npcUsed[(int)Intent.Kind] = true;
+            _playerNextRerollBonus = kind == ScoreHandKind.Five && offer.IsFormed;
+            _npcNextRerollBonus = Intent.Kind == ScoreHandKind.Five && ScoreRules.Evaluate(Intent.Kind, _preparedNpc).IsFormed;
             int playerRawHp = PlayerHp - forecast.DamageToPlayer;
             int npcRawHp = NpcHp - forecast.DamageToNpc;
             PlayerHp = Math.Max(0, playerRawHp);
@@ -468,11 +476,11 @@ namespace ParvaMirabilia.Core
                 PlayerHeld = (bool[])Held.Clone(), PlayerKind = kind, NpcKind = Intent.Kind,
                 PlayerScore = forecast.Score, NpcScore = forecast.NpcScore,
                 PlayerBaseScore = offer.BaseScore, PlayerBonusScore = offer.BonusScore,
-                NpcBaseScore = Intent.BaseScore, NpcBonusScore = Intent.BonusScore, IsSaved = saved,
+                NpcBaseScore = Intent.BaseScore, NpcBonusScore = Intent.BonusScore, IsSaved = saved, IsReversed = forecast.IsReversed,
                 DamageToPlayer = forecast.DamageToPlayer, DamageToNpc = forecast.DamageToNpc,
                 PlayerRawHpAfter = playerRawHp, NpcRawHpAfter = npcRawHp,
                 PlayerHpAfter = PlayerHp, NpcHpAfter = NpcHp,
-                PlayerRerollsUsed = 2 - RerollsLeft, NpcRerollsUsed = _npcRerollsUsed, NpcRolls = _preparedNpcRolls
+                PlayerRerollsUsed = _playerRoundRerolls - RerollsLeft, NpcRerollsUsed = _npcRerollsUsed, NpcRolls = _preparedNpcRolls
             };
             _history.Add(receipt); LastRound = receipt;
             Phase = MatchPhase.Resolving;
@@ -500,7 +508,10 @@ namespace ParvaMirabilia.Core
             PlayerDice = restoring ? _savedDice : new int[5];
             Held = restoring ? _savedHeld : new bool[5];
             _savedDice = null; _savedHeld = null;
-            NpcDice = null; RerollsLeft = 2;
+            NpcDice = null;
+            _playerRoundRerolls = 2 + (_playerNextRerollBonus ? 1 : 0);
+            RerollsLeft = _playerRoundRerolls;
+            _playerNextRerollBonus = false;
             Phase = restoring ? MatchPhase.AwaitingReroll : MatchPhase.AwaitingRoll;
             PrepareNpcTurn();
         }
@@ -519,12 +530,13 @@ namespace ParvaMirabilia.Core
             var rolls = new List<NpcRollSnapshot> { new NpcRollSnapshot(_preparedNpc, 0) };
             var available = new bool[ScoreRules.HandCount];
             for (int kind = 0; kind < available.Length; kind++) available[kind] = !_npcUsed[kind];
-            int rerollLimit = Personality == NpcPersonality.Balanced ? 1 : 2;
+            int rerollLimit = (Personality == NpcPersonality.Balanced ? 1 : 2) + (_npcNextRerollBonus ? 1 : 0);
+            _npcNextRerollBonus = false;
             for (int reroll = 0; reroll < rerollLimit; reroll++)
             {
                 int mask = Personality == NpcPersonality.Balanced
                     ? BasicHoldMask(_preparedNpc, available)
-                    : ScoreHoldPolicyExact.Plan(_preparedNpc, available, 2 - reroll, Round, Personality);
+                    : ScoreHoldPolicyExact.Plan(_preparedNpc, available, rerollLimit - reroll, Round, Personality);
                 if (mask == 31) break;
                 for (int i = 0; i < 5; i++) if ((mask & (1 << i)) == 0) _preparedNpc[i] = _npcRandom.Range(1, 7);
                 _npcRerollsUsed++;

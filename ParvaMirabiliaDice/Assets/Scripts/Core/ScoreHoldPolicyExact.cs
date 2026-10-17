@@ -14,6 +14,7 @@ namespace ParvaMirabilia.Core
         {
             internal int[] One;
             internal int[] Two;
+            internal int[] Three;
         }
 
         private static readonly int[] Factorial = { 1, 1, 2, 6, 24, 120 };
@@ -46,7 +47,7 @@ namespace ParvaMirabilia.Core
             var counts = new int[6];
             for (int i = 0; i < dice.Length; i++) counts[dice[i] - 1]++;
             int state = StateIndexes[Code(counts)];
-            int keep = rerollsLeft == 2 ? policy.Two[state] : policy.One[state];
+            int keep = rerollsLeft >= 3 ? policy.Three[state] : rerollsLeft == 2 ? policy.Two[state] : policy.One[state];
             // -1 means stop; holding all is never used as a dummy consumed reroll.
             if (keep < 0) return 31;
             var remaining = (int[])Keeps[keep].Clone();
@@ -66,9 +67,11 @@ namespace ParvaMirabilia.Core
                 stop[state] = ScoreHoldPolicy.Utility(
                     ScoreHoldPolicy.Select(CanonicalCodes[state], available, round, personality), round, personality);
             var oneValues = new double[States.Length];
-            var policy = new Policy { One = new int[States.Length], Two = new int[States.Length] };
+            var policy = new Policy { One = new int[States.Length], Two = new int[States.Length], Three = new int[States.Length] };
             Pass(stop, stop, oneValues, policy.One);
-            Pass(oneValues, stop, new double[States.Length], policy.Two);
+            var twoValues = new double[States.Length];
+            Pass(oneValues, stop, twoValues, policy.Two);
+            Pass(twoValues, stop, new double[States.Length], policy.Three);
             return policy;
         }
 

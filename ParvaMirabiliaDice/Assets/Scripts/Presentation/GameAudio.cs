@@ -20,8 +20,9 @@ namespace ParvaMirabilia.Presentation
             "formation"
         };
 
-        /// <summary>Master volume steps cycled by the on-screen control. The last step is mute.</summary>
+        // Preserve the old four-step preference when upgrading existing installations.
         private static readonly float[] VolumeSteps = { 1f, 0.6f, 0.3f, 0f };
+        private const float BgmGain = 0.315f; // 30% below the former 0.45 gain.
 
         /// <summary>RMS the interface sounds are lifted to; impulses stay louder by nature.</summary>
         private const float TargetRms = 0.06f;
@@ -45,7 +46,10 @@ namespace ParvaMirabilia.Presentation
         private readonly Dictionary<string, float> _gains = new Dictionary<string, float>();
         private AudioSource _bgmSource;
         private AudioSource _sfxSource;
-        private int _volumeStep;
+        private float _volume;
+        private float _lastAudibleVolume = 1f;
+        private bool _volumeSavePending;
+        private float _volumeSaveAt;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Boot()
@@ -84,7 +88,10 @@ namespace ParvaMirabilia.Presentation
                 _gains[ClipNames[i]] = gain;
             }
 
-            _volumeStep = Mathf.Clamp(PlayerPrefs.GetInt("pv.audioStep", 0), 0, VolumeSteps.Length - 1);
+            _volume = PlayerPrefs.HasKey("pv.audioVolume")
+                ? Mathf.Clamp01(PlayerPrefs.GetFloat("pv.audioVolume"))
+                : VolumeSteps[Mathf.Clamp(PlayerPrefs.GetInt("pv.audioStep", 0), 0, VolumeSteps.Length - 1)];
+            if (_volume > 0.001f) _lastAudibleVolume = _volume;
 
             var bgm = Resources.Load<AudioClip>("Audio/bgm_duel");
             if (bgm != null)
@@ -96,10 +103,10 @@ namespace ParvaMirabilia.Presentation
             ApplyVolumes();
         }
 
-        /// <summary>Master volume of the current step, 0 when muted.</summary>
+        /// <summary>Continuous master volume, 0 when muted.</summary>
         public static float Volume
         {
-            get { return Instance == null ? 0f : VolumeSteps[Instance._volumeStep]; }
+            get { return Instance == null ? 0f : Instance._volume; }
         }
 
         public static string VolumeLabel()
@@ -111,16 +118,42 @@ namespace ParvaMirabilia.Presentation
             return "音 " + Mathf.RoundToInt(volume * 100f) + "%";
         }
 
-        /// <summary>Cycles ON → 60% → 30% → OFF and remembers the choice.</summary>
-        public static void CycleVolume()
+        public static void SetVolume(float value)
         {
             if (Instance == null)
                 return;
-
-            Instance._volumeStep = (Instance._volumeStep + 1) % VolumeSteps.Length;
-            PlayerPrefs.SetInt("pv.audioStep", Instance._volumeStep);
-            PlayerPrefs.Save();
+            Instance._volume = Mathf.Clamp01(value);
+            if (Instance._volume > 0.001f) Instance._lastAudibleVolume = Instance._volume;
+            // The registry write is cheap, so the value is always current; the costly Save is
+            // postponed until the slider has been still for a moment, because one drag fires
+            // OnValueChanged dozens of times.
+            PlayerPrefs.SetFloat("pv.audioVolume", Instance._volume);
+            Instance.QueueVolumeSave();
             Instance.ApplyVolumes();
+        }
+
+        /// <summary>Writes the pending volume preference only once the slider has stopped moving.</summary>
+        private void QueueVolumeSave()
+        {
+            _volumeSaveAt = Time.unscaledTime;
+            if (!_volumeSavePending)
+            {
+                _volumeSavePending = true;
+                StartCoroutine(SaveVolumeWhenIdle());
+            }
+        }
+
+        private System.Collections.IEnumerator SaveVolumeWhenIdle()
+        {
+            while (Time.unscaledTime - _volumeSaveAt < .5f)
+                yield return new WaitForSecondsRealtime(.25f);
+            _volumeSavePending = false;
+            PlayerPrefs.Save();
+        }
+
+        public static void ToggleMute()
+        {
+            if (Instance != null) SetVolume(Volume <= 0.001f ? Instance._lastAudibleVolume : 0f);
         }
 
         public static void Play(string clipName)
@@ -332,9 +365,9 @@ namespace ParvaMirabilia.Presentation
 
         private void ApplyVolumes()
         {
-            float volume = VolumeSteps[_volumeStep];
+            float volume = _volume;
             _sfxSource.volume = Mathf.Clamp01(volume);
-            _bgmSource.volume = Mathf.Clamp01(volume * 0.45f);
+            _bgmSource.volume = Mathf.Clamp01(volume * BgmGain);
 
             if (volume <= 0.001f)
                 _bgmSource.Pause();

@@ -93,7 +93,7 @@ namespace ParvaMirabilia.Tests
                     "highFaces: keep >=4, up to two rerolls until all held, then best unused category. " +
                     "earlyStop: commit best unused when its score meets the public NPC score; otherwise pattern holds. " +
                     "saveAttack: pattern holds; save once when a surviving full exchange secures a knockout unavailable normally, or when a multiplier adds >=12 points while trailing the NPC and leaves >=20 HP. " +
-                    "All policies use floor((20+sum)*role multiplier), HP240, simultaneous damage after common floor(minScore/2) absorption, and raw remaining HP for double KO. Scorecards refresh only when exhausted. " +
+                    "All policies use floor((20+sum)*role multiplier) except fixed 150 formed Yahtzee, player HP300 / NPC HP250, simultaneous damage after common floor(minScore/2) absorption, and raw remaining HP for double KO. Scorecards refresh only when exhausted. " +
                     "Equal seeds do not imply equal match duration; these bounded heuristic comparisons do not prove fun or optimal match strategy."
             };
         }
@@ -167,7 +167,7 @@ namespace ParvaMirabilia.Tests
                 Assert.That(result.rounds, Is.InRange(2, 2 * ScoreDuel.SafetyRoundBound));
                 Assert.That(result.zeroCount, Is.Zero);
                 Assert.That(result.playerScore, Is.EqualTo(result.playerBaseScore + result.playerBonusScore));
-                Assert.That(result.rerolls, Is.InRange(0, result.rounds * 2));
+                Assert.That(result.rerolls, Is.InRange(0, result.rounds * 3));
                 Assert.That(result.saves, Is.InRange(0, 2));
                 Assert.That(result.restores, Is.InRange(0, result.saves));
                 int roles = 0;

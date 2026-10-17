@@ -277,8 +277,8 @@ namespace ParvaMirabilia.Quality.Tests
             var forecast = Engine.Forecast(selected);
             Assert.That(Read<Text>("_sdRoleLabel").text, Is.EqualTo(ScoreRules.Name(selected)));
             Assert.That(Read<Text>("_sdScoreNumber").text, Is.EqualTo(offer.Score.ToString()));
-            Assert.That(Read<Text>("_sdNpcDamage").text, Is.EqualTo("−" + forecast.DamageToNpc));
-            Assert.That(Read<Text>("_sdPlayerDamage").text, Is.EqualTo("−" + forecast.DamageToPlayer));
+            Assert.That(ScoreDuelHealthLine.Damage(Read<Text>("_sdNpcHpLabel")), Is.EqualTo(forecast.DamageToNpc));
+            Assert.That(ScoreDuelHealthLine.Damage(Read<Text>("_sdPlayerHpLabel")), Is.EqualTo(forecast.DamageToPlayer));
             Assert.That(Read<Image>("_sdPlayerBar").color, Is.Not.EqualTo(Read<Image>("_sdNpcBar").color));
             foreach (string field in new[] { "_sdInstruction", "_sdEffectLabel" })
             {
@@ -320,7 +320,13 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(left.rect.height, Is.LessThanOrEqualTo(400f), "role rails no longer span the HP bars");
             var carry = Read<Button>("_sdSaveButton");
             Assert.That(carry.transform.parent, Is.EqualTo(battle), "the carry action belongs to the central table");
-            Assert.That(((RectTransform)carry.transform).anchoredPosition.x, Is.Zero.Within(.1f));
+            Rect carryBounds = TableBounds((RectTransform)carry.transform);
+            Rect scoreBounds = TableBounds(Read<Text>("_sdScoreNumber").rectTransform);
+            Assert.That(carryBounds.center.x, Is.EqualTo(scoreBounds.center.x).Within(.1f), "carry stays centered under the score");
+            Assert.That(carryBounds.yMax, Is.LessThan(scoreBounds.center.y), "carry sits below the score");
+            Assert.That(carryBounds.xMin, Is.GreaterThan(TableBounds(left).xMax), "carry clears the enemy rail");
+            Assert.That(carryBounds.xMax, Is.LessThan(TableBounds(right).xMin), "carry clears the player rail");
+            Assert.That(carryBounds.yMin, Is.GreaterThan(TableBounds((RectTransform)battle.Find("PlayerBar")).yMax), "carry clears the HP bar");
             Assert.That(left.GetComponentsInChildren<Button>().Length, Is.Zero, "enemy history is read-only");
             AssertCentralCorridor(left, right);
             AssertFullWidthTableAndCenteredHealth(left, right);
@@ -381,13 +387,25 @@ namespace ParvaMirabilia.Quality.Tests
             {
                 Text label = Read<Text>(field);
                 Rect bounds = TableBounds(label.rectTransform);
-                Rect bar = TableBounds((RectTransform)battle.Find(field == "_sdNpcHpLabel" ? "NpcBar" : "PlayerBar"));
+                bool npcSide = field == "_sdNpcHpLabel";
+                Rect bar = TableBounds((RectTransform)battle.Find(npcSide ? "NpcBar" : "PlayerBar"));
                 Assert.That(bounds.center.x, Is.Zero.Within(.1f), field + " is centered over the play area");
                 Assert.That(bounds.center.y, Is.EqualTo(bar.center.y).Within(.1f), field + " sits inside the thicker health bar");
                 Assert.That(bar.height, Is.GreaterThanOrEqualTo(16f));
                 Assert.That(label.alignment, Is.EqualTo(TextAnchor.MiddleCenter));
-                Assert.That(label.text, Does.Contain("/"));
-                Assert.That(label.text.Length, Is.GreaterThan((ScoreDuel.StartingHp + " / " + ScoreDuel.StartingHp).Length), "centered health includes its side name");
+                Assert.That(label.fontStyle, Is.EqualTo(FontStyle.Normal), field + " keeps health and damage in one face");
+                Assert.That(label.text, Does.StartWith(npcSide ? "相手 " : "あなた "),
+                    "the centered line opens with the side it belongs to");
+                Assert.That(label.text, Does.Not.Contain(" / "), "health prints as one figure, not a spaced pair");
+                // This runs after real rounds, so the bar may still be draining: what has to hold is
+                // that the line states one readable pool against the cap, not that it has settled.
+                string[] parts = label.text.Split(' ');
+                int shownHealth;
+                Assert.That(parts.Length, Is.GreaterThanOrEqualTo(2), "the line carries health after its side name");
+                Assert.That(int.TryParse(parts[1].Split('/')[0], out shownHealth), Is.True, "the line prints a readable health figure");
+                Assert.That(parts[1].Split('/')[1], Is.EqualTo((npcSide ? Engine.NpcMaxHp : ScoreDuel.StartingHp).ToString()),
+                    "the line states the cap this bar drains from");
+                Assert.That(shownHealth, Is.InRange(0, npcSide ? Engine.NpcMaxHp : ScoreDuel.StartingHp));
             }
             Rect playerBar = TableBounds((RectTransform)battle.Find("PlayerBar"));
             for (int i = 0; i < 2; i++)

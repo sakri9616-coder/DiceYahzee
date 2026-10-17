@@ -206,8 +206,10 @@ namespace ParvaMirabilia.Presentation
                     _sdEngine.LastRound.NpcScore == receipt.NpcScore &&
                     _sdEngine.PlayerHp == proof.PlayerHp && _sdEngine.NpcHp == proof.NpcHp &&
                     SDArrayEquals(_sdEngine.NpcDice, receipt.NpcDice), "round " + _sdEngine.Round + " matches the independent core receipt");
-                SmokeCheck(_sdNpcDamage.text == "−" + forecast.DamageToNpc && _sdPlayerDamage.text == "−" + forecast.DamageToPlayer,
-                    "round " + _sdEngine.Round + " renders both independently forecast damage values");
+                SmokeCheck(SDSmokeDamageAgrees(_sdNpcHpLabel, receipt.DamageToNpc) &&
+                    SDSmokeDamageAgrees(_sdPlayerHpLabel, receipt.DamageToPlayer) &&
+                    _sdEngine.LastRound.DamageToNpc == forecast.DamageToNpc && _sdEngine.LastRound.DamageToPlayer == forecast.DamageToPlayer,
+                    "round " + _sdEngine.Round + " retires both forecasts from the bars for the clash that actually lands");
                 SmokeCheck(_sdEngine.LastRound.DamageToPlayer == forecast.DamageToPlayer &&
                     _sdEngine.LastRound.DamageToNpc == forecast.DamageToNpc,
                     "round " + _sdEngine.Round + " uses exactly the displayed clash damage");
@@ -258,15 +260,17 @@ namespace ParvaMirabilia.Presentation
             SmokeCheck(_sdSaveArmed && !_sdEngine.SavedHandUsed && _sdEngine.History.Count == 0 &&
                 _sdEngine.PlayerHp == oldPlayerHp && _sdEngine.NpcHp == oldNpcHp && SDArrayEquals(savedDice, _sdEngine.PlayerDice),
                 "carry mode arms without resolving, spending its use, or changing the current hand");
-            SmokeCheck(_sdNpcDamage.text == "−" + savedForecast.DamageToNpc && _sdPlayerDamage.text == "−" + savedForecast.DamageToPlayer,
-                "armed carry previews the exact unguarded damage");
+            SmokeCheck(SDSmokeLineDamage(_sdNpcHpLabel) == savedForecast.DamageToNpc && SDSmokeLineDamage(_sdPlayerHpLabel) == savedForecast.DamageToPlayer,
+                "armed carry previews the exact normal clash damage with half-minimum absorption");
             SmokeCapture("carry-armed");
+            yield return new WaitForSecondsRealtime(.20f);
+            SmokeCapture("carry-collecting");
             yield return null;
             _sdSaveButton.onClick.Invoke();
             var normalForecast = _sdEngine.Forecast(_sdSelectedKind);
             SmokeCheck(!_sdSaveArmed && _sdEngine.History.Count == 0 &&
-                _sdNpcDamage.text == "−" + normalForecast.DamageToNpc && _sdPlayerDamage.text == "−" + normalForecast.DamageToPlayer,
-                "disarming carry restores the ordinary clash preview without resolving");
+                SDSmokeLineDamage(_sdNpcHpLabel) == normalForecast.DamageToNpc && SDSmokeLineDamage(_sdPlayerHpLabel) == normalForecast.DamageToPlayer,
+                "disarming carry keeps the ordinary clash preview without resolving");
             SmokeCapture("carry-disarmed");
             yield return null; _sdSaveButton.onClick.Invoke();
             yield return null; SDSmokeFlick(1, 24);
@@ -278,8 +282,10 @@ namespace ParvaMirabilia.Presentation
             yield return null; SDSmokeFlick(0, 120);
             SmokeCheck(_sdEngine.LastRound.IsSaved && _sdEngine.SavedHandUsed &&
                 _sdEngine.PlayerHp == Mathf.Max(0, oldPlayerHp - savedForecast.DamageToPlayer) &&
-                _sdEngine.NpcHp == Mathf.Max(0, oldNpcHp - savedForecast.DamageToNpc), "the full carry pull exchanges the exact displayed unguarded attacks once");
-            yield return new WaitForSecondsRealtime(.95f);
+                _sdEngine.NpcHp == Mathf.Max(0, oldNpcHp - savedForecast.DamageToNpc), "the completed carry pull exchanges the exact displayed normal damage once");
+            yield return new WaitForSecondsRealtime(.37f);
+            SmokeCapture("hp-damage");
+            yield return new WaitForSecondsRealtime(.58f);
             SmokeCapture("saved-exchange");
             SDSmokeTableClick();
             yield return new WaitForSecondsRealtime(.95f);
@@ -306,8 +312,8 @@ namespace ParvaMirabilia.Presentation
                 foreach (float age in new[] { .24f, .36f, .62f })
                 {
                     _sdAttackAge = age; SDAnimateImpactPresentation(); SDRefreshDieLabelsVisibility();
-                    SmokeCheck(age < .30f ? !_sdImpactContact && _sdImpactCounter.text == "" : _sdImpactContact && _sdImpactCounter.text != "",
-                        "tier " + tier + " shows contact-gated damage at fixed age " + age);
+                    SmokeCheck(_sdImpactContact == (age >= .30f) && _sdImpactCounter.text == "" && _sdImpactIncomingCounter.text == "",
+                        "tier " + tier + " gates contact without scattered damage numbers at fixed age " + age);
                     SmokeCapture("damage-tier-" + tier + (age < .30f ? "-precontact" : age < .4f ? "-contact" : "-recovery"));
                 }
                 SDResetImpactPresentation();
@@ -383,7 +389,7 @@ namespace ParvaMirabilia.Presentation
             var forecast = proof.Forecast(_sdSelectedKind);
             SmokeCheck(_sdScoreNumber.text == offer.Score.ToString() && _sdBreakdown.text == formula &&
                 _sdNpcScoreNumber.text == proof.Intent.Score.ToString() &&
-                _sdNpcDamage.text == "−" + forecast.DamageToNpc && _sdPlayerDamage.text == "−" + forecast.DamageToPlayer,
+                SDSmokeLineDamage(_sdNpcHpLabel) == forecast.DamageToNpc && SDSmokeLineDamage(_sdPlayerHpLabel) == forecast.DamageToPlayer,
                 "round " + _sdEngine.Round + " visibly matches the independent score formula and both attack forecasts");
             SmokeCheck(_sdPlayerBar.color != _sdNpcBar.color && _sdSaveSymbol.sprite != null,
                 "both health sides have distinct colors and the central carry action keeps imported artwork");
@@ -400,10 +406,14 @@ namespace ParvaMirabilia.Presentation
             var left = (RectTransform)_sdBattle.Find("NpcScorecard");
             SmokeCheck(left != null && Mathf.Abs(left.anchoredPosition.x + right.anchoredPosition.x) < .1f && left.rect.size == right.rect.size,
                 "symmetric enemy and player role rails flank the central play area");
+            Rect carry = SDSmokeTableBounds((RectTransform)_sdSaveButton.transform);
+            Rect score = SDSmokeTableBounds(_sdScoreNumber.rectTransform);
+            Rect health = SDSmokeTableBounds((RectTransform)_sdBattle.Find("PlayerBar"));
             SmokeCheck(left.rect.width <= 190 && left.rect.height <= 400 &&
-                _sdSaveButton.transform.parent == _sdBattle &&
-                Mathf.Abs(((RectTransform)_sdSaveButton.transform).anchoredPosition.x) < .1f,
-                "compact role rails frame a central carry action");
+                _sdSaveButton.transform.parent == _sdBattle && Mathf.Abs(carry.center.x - score.center.x) < .1f &&
+                carry.xMin > SDSmokeTableBounds(left).xMax && carry.xMax < SDSmokeTableBounds(right).xMin &&
+                carry.yMax < score.center.y && carry.yMin > health.yMax,
+                "carry sits on the central axis between score and HP without touching either rail");
             var rim = (RectTransform)_sdBattle.Find("TableRim");
             var mat = (RectTransform)_sdBattle.Find("TableMat");
             Rect table = SDSmokeTableBounds(mat);
@@ -422,12 +432,19 @@ namespace ParvaMirabilia.Presentation
             }
             foreach (var label in new[] { _sdNpcHpLabel, _sdPlayerHpLabel })
             {
-                Rect bar = SDSmokeTableBounds((RectTransform)_sdBattle.Find(label == _sdNpcHpLabel ? "NpcBar" : "PlayerBar"));
+                bool npcSide = label == _sdNpcHpLabel;
+                Rect bar = SDSmokeTableBounds((RectTransform)_sdBattle.Find(npcSide ? "NpcBar" : "PlayerBar"));
+                string side = npcSide ? "相手" : "あなた";
+                int barMax = npcSide ? _sdEngine.NpcMaxHp : ScoreDuel.StartingHp;
+                int barHealth = SDSmokeLineHealth(label);
                 SmokeCheck(Mathf.Abs(SDSmokeTableBounds(label.rectTransform).center.x) < .1f &&
                     Mathf.Abs(SDSmokeTableBounds(label.rectTransform).center.y - bar.center.y) < .1f &&
                     bar.height >= 16 &&
-                    label.alignment == TextAnchor.MiddleCenter && label.text.Contains("/") &&
-                    label.text.Length > (ScoreDuel.StartingHp + " / " + ScoreDuel.StartingHp).Length,
+                    label.alignment == TextAnchor.MiddleCenter &&
+                    label.text.StartsWith(side + " ") &&
+                    label.text.Contains("/" + barMax) &&
+                    barHealth >= 0 && barHealth <= barMax &&
+                    (SDSmokeLineDamage(label) == 0 || label.text.Contains(SDDamageTag)),
                     label.name + " is centered inside the thicker health bar");
             }
             Rect playerBar = SDSmokeTableBounds((RectTransform)_sdBattle.Find("PlayerBar"));
@@ -494,6 +511,34 @@ namespace ParvaMirabilia.Presentation
             if (a == null || b == null || a.Length != b.Length) return false;
             for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
             return true;
+        }
+        /// <summary>The drop a health bar prints, read back out of the glyphs the player is shown.</summary>
+        private static int SDSmokeLineDamage(Text label)
+        {
+            if (label == null || string.IsNullOrEmpty(label.text)) return 0;
+            int tag = label.text.IndexOf(SDDamageTag, System.StringComparison.Ordinal);
+            if (tag < 0) return 0;
+            int start = tag + SDDamageTag.Length + 1;   // the minus sign is a glyph, not part of the figure
+            int end = label.text.IndexOf('<', start);
+            int damage;
+            return int.TryParse(label.text.Substring(start, (end < 0 ? label.text.Length : end) - start), out damage) ? damage : -1;
+        }
+        /// <summary>The health a printed line shows, or -1 when the line does not read as side + hp/cap.</summary>
+        private static int SDSmokeLineHealth(Text label)
+        {
+            if (label == null || string.IsNullOrEmpty(label.text)) return -1;
+            string[] parts = label.text.Split(' ');
+            if (parts.Length < 2) return -1;
+            int slash = parts[1].IndexOf('/');
+            int health;
+            if (slash <= 0 || !int.TryParse(parts[1].Substring(0, slash), out health)) return -1;
+            return health;
+        }
+        /// <summary>True while a bar prints either no drop at all or the exact figure the clash settles on.</summary>
+        private static bool SDSmokeDamageAgrees(Text label, int expected)
+        {
+            int printed = SDSmokeLineDamage(label);
+            return printed == 0 || printed == expected;
         }
         private int SDVisiblePips(int index)
         {

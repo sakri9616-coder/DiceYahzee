@@ -8,18 +8,28 @@ namespace ParvaMirabilia.Presentation
     public sealed partial class GameFlow
     {
         private const float SDHpWidth = 572;
-        private const float SDHpThickness = 18;
+        private const float SDHpThickness = 36;
         private const float SDPlayerHpY = -278;
         private const float SDRollPipY = -309;
         private const float SDRolePanelWidth = 188;
         private const float SDRolePanelHeight = 390;
         private const float SDRolePanelX = 515;
         private const float SDPlayerDiceY = -28;
-        private Text _sdScoreNumber, _sdNpcScoreNumber, _sdNpcFormula, _sdNpcDamage, _sdPlayerDamage;
-        private Text _sdNpcHpDelta, _sdPlayerHpDelta;
+        private Text _sdScoreNumber, _sdNpcScoreNumber, _sdNpcFormula;
+        // Each health bar prints one line — side, health, then the drop it is taking — so the line
+        // is recomposed from these four values rather than spelling the damage out twice.
+        private float _sdPlayerHpShown, _sdNpcHpShown;
+        private int _sdPlayerDamageShown, _sdNpcDamageShown;
         private readonly Image[] _sdHoldMarks = new Image[5];
-        private readonly Image[] _sdRollPips = new Image[2];
+        // Three slots so a formed Yahtzee's bonus reroll has a home; a normal round hides the third.
+        private readonly Image[] _sdRollPips = new Image[3];
+        // The core exposes only the rerolls still left, so the round's allowance is remembered at
+        // its start and reported until the next round resets it.
+        private int _sdRerollAllowance = 2;
+        private int _sdRerollAllowanceRound = -1;
         private Image _sdPlayerGhost, _sdNpcGhost, _sdSaveSymbol;
+        private Image _sdPlayerLossBand, _sdNpcLossBand;
+        private Outline _sdPlayerHpImpactOutline, _sdNpcHpImpactOutline;
         private Image _sdSoundSymbol;
         private float _sdLastSoundVolume = -1;
         private static readonly Color SDRailInk = new Color32(218, 229, 224, 255);
@@ -31,6 +41,18 @@ namespace ParvaMirabilia.Presentation
         private static readonly Color SDPaperMuted = new Color32(90, 102, 103, 255);
         private static readonly Color SDPlayerColor = new Color32(104, 168, 156, 255);
         private static readonly Color SDEnemyColor = new Color32(181, 111, 108, 255);
+        /// <summary>
+        /// The drop a bar is taking, printed in red on the bar that receives it.
+        ///
+        /// Both fills sit in the middle of the luminance range, so the figure has to be clearly
+        /// darker than they are to survive: a bright coral measured only about 1.2:1 over the teal
+        /// and 1.1:1 over the enemy rose, which is a difference in hue rather than a readable one.
+        /// This deeper red measures about 2.0:1 and 1.5:1 there, and about 2.7:1 over the ivory
+        /// drain band the figure is printed on while a bar empties.
+        /// </summary>
+        private static readonly Color SDDamageInk = new Color32(193, 39, 45, 255);
+        /// <summary>The same red as a rich-text tag, built once so a per-frame line costs no parsing.</summary>
+        private static readonly string SDDamageTag = "<color=#" + ColorUtility.ToHtmlStringRGB(SDDamageInk) + ">";
 
         private Image SDIcon(string name, Transform parent, string icon, Vector2 position, float size, Color color)
         {
@@ -60,29 +82,31 @@ namespace ParvaMirabilia.Presentation
 
         private void SDBuildHudDetails()
         {
-            _sdNpcDamage = SDText("NpcDamage", _sdBattle, "", 26, new Vector2(268, 284), new Vector2(120, 34), SDPositive, TextAnchor.MiddleRight);
-            _sdNpcDamage.fontStyle = FontStyle.Bold;
-            SDAddScoreEdge(_sdNpcDamage);
-            _sdPlayerDamage = SDText("PlayerDamage", _sdBattle, "", 26, new Vector2(268, -244), new Vector2(120, 34), SDNegative, TextAnchor.MiddleRight);
-            _sdPlayerDamage.fontStyle = FontStyle.Bold;
-            SDAddScoreEdge(_sdPlayerDamage);
-            // The amount each bar is about to lose, shown beside the bar while it drains.
-            _sdNpcHpDelta = SDText("NpcHpDelta", _sdBattle, "", 22, new Vector2(-350, 245), new Vector2(136, 30), SDPositive, TextAnchor.MiddleRight);
-            _sdNpcHpDelta.fontStyle = FontStyle.Bold;
-            SDAddScoreEdge(_sdNpcHpDelta);
-            _sdPlayerHpDelta = SDText("PlayerHpDelta", _sdBattle, "", 22, new Vector2(-350, -278), new Vector2(136, 30), SDNegative, TextAnchor.MiddleRight);
-            _sdPlayerHpDelta.fontStyle = FontStyle.Bold;
-            SDAddScoreEdge(_sdPlayerHpDelta);
             _sdNpcGhost = SDGhost(_sdNpcBar);
             _sdPlayerGhost = SDGhost(_sdPlayerBar);
+            _sdNpcLossBand = SDBuildHpLossBand(_sdNpcBar, out _sdNpcHpImpactOutline);
+            _sdPlayerLossBand = SDBuildHpLossBand(_sdPlayerBar, out _sdPlayerHpImpactOutline);
+            foreach (var label in new[] { _sdNpcHpLabel, _sdPlayerHpLabel })
+            {
+                // Health and the drop it is taking are one centred line inside the track. Warping a
+                // second, larger numeral onto the right end of the bar read as a sticker laid over
+                // the bar rather than as this bar's own figure, and forcing its weight up to survive
+                // the ivory drain band only smeared it further.
+                label.rectTransform.anchoredPosition = Vector2.zero;
+                label.rectTransform.sizeDelta = new Vector2(SDHpWidth - 24, 30);
+                label.alignment = TextAnchor.MiddleCenter;
+                label.fontSize = 18;
+                label.horizontalOverflow = HorizontalWrapMode.Overflow;
+            }
             _sdScoreNumber = SDText("ScoreNumber", _sdBattle.Find("CurrentRole"), "", 58, new Vector2(0, -29), new Vector2(240, 100), SDScoreGold);
             _sdScoreNumber.font = Resources.Load<Font>("Fonts/AoboshiOne-Regular") ?? _sdScoreNumber.font;
             _sdScoreNumber.verticalOverflow = VerticalWrapMode.Overflow;
+            _sdScoreNumber.raycastTarget = false;
             SDAddScoreEdge(_sdScoreNumber);
-            for (int i = 0; i < 2; i++)
+            for (int i = 0; i < 3; i++)
             {
                 _sdRollPips[i] = UiFactory.CreatePanel("RollPip" + i, _sdBattle, Vector2.one * 14,
-                    new Vector2((i - .5f) * 24, SDRollPipY), SDPositive);
+                    new Vector2((i - 1) * 24, SDRollPipY), SDPositive);
                 _sdRollPips[i].sprite = UiFactory.CircleSprite;
                 // A dark rim keeps an unspent reroll legible against the leather even when the
                 // gold is dimmed on the spent one.
@@ -94,6 +118,29 @@ namespace ParvaMirabilia.Presentation
                 _sdHoldMarks[i] = SDIcon("HoldMark" + i, _sdBattle, "icon-lock", new Vector2(SDHandCenterX + (i - 2) * 132, SDPlayerDiceY - 74), 18, SDPositive);
         }
 
+        /// <summary>
+        /// One health readout: side, current health, then the drop that side is taking in red. A
+        /// single centred label carries all of it, so the damage reads as part of this bar's own
+        /// figure instead of as a second numeral parked at the far end of the track.
+        /// </summary>
+        private static string SDHealthLine(string side, int hp, int max, int damage)
+        {
+            string line = side + " " + hp + "/" + Mathf.Max(0, max);
+            return damage > 0 ? line + " " + SDDamageTag + "−" + damage + "</color>" : line;
+        }
+
+        /// <summary>
+        /// Reprints both health lines from the health currently on screen and the drop each bar
+        /// owes. The forecast and the drain both feed this one line, so neither can leave a stale
+        /// figure behind for the other to contradict.
+        /// </summary>
+        private void SDApplyHpLines()
+        {
+            if (_sdEngine == null || _sdPlayerHpLabel == null) return;
+            _sdPlayerHpLabel.text = SDHealthLine("あなた", Mathf.RoundToInt(_sdPlayerHpShown), ScoreDuel.StartingHp, _sdPlayerDamageShown);
+            _sdNpcHpLabel.text = SDHealthLine("相手", Mathf.RoundToInt(_sdNpcHpShown), _sdEngine.NpcMaxHp, _sdNpcDamageShown);
+        }
+
         private static Image SDGhost(Image fill)
         {
             var ghost = UiFactory.CreatePanel("Forecast", fill.transform.parent, new Vector2(SDHpWidth, SDHpThickness), Vector2.zero, SDEnemyColor);
@@ -103,8 +150,21 @@ namespace ParvaMirabilia.Presentation
             return ghost;
         }
 
+        private static Image SDBuildHpLossBand(Image fill, out Outline outline)
+        {
+            var band = SDGhost(fill);
+            band.name = "DamageLoss";
+            band.raycastTarget = false;
+            band.gameObject.SetActive(false);
+            outline = fill.transform.parent.gameObject.AddComponent<Outline>();
+            outline.effectDistance = new Vector2(3, -3);
+            outline.effectColor = Color.clear;
+            return band;
+        }
+
         private static string SDMultiplier(ScoreHandKind kind, bool formed = true)
         {
+            if (kind == ScoreHandKind.Five && formed) return "150";
             float multiplier = formed ? ScoreRules.MultiplierQuarters(kind) / 4f : 1f;
             return "×" + multiplier.ToString("0.##", CultureInfo.InvariantCulture);
         }
@@ -112,24 +172,38 @@ namespace ParvaMirabilia.Presentation
         private static string SDCalculation(ScoreHandKind kind, int[] dice)
         {
             ScoreOffer offer = ScoreRules.Evaluate(kind, dice);
+            if (kind == ScoreHandKind.Five && offer.IsFormed) return "150";
             return offer.BaseScore + " " + SDMultiplier(kind, offer.IsFormed);
         }
 
         private void SDRefreshHud()
         {
-            if (_sdEngine == null || _sdNpcDamage == null) return;
+            if (_sdEngine == null || _sdPlayerHpLabel == null) return;
             bool plan = !_sdRolling && !_sdCommitted && !SDModalOpen;
-            ScoreForecast forecast = _sdCommitted ? new ScoreForecast(_sdEngine.LastRound.PlayerScore, _sdEngine.LastRound.NpcScore, _sdEngine.LastRound.IsSaved) : _sdEngine.Forecast(_sdSelectedKind, _sdSaveArmed);
-            _sdNpcDamage.text = _sdRolling ? "" : "−" + (_sdCommitted ? _sdEngine.LastRound.DamageToNpc : forecast.DamageToNpc);
-            _sdPlayerDamage.text = _sdRolling ? "" : "−" + (_sdCommitted ? _sdEngine.LastRound.DamageToPlayer : forecast.DamageToPlayer);
-            _sdNpcDamage.color = SDPositive;
-            _sdPlayerDamage.color = SDNegative;
+            ScoreForecast forecast = _sdCommitted ? new ScoreForecast(_sdEngine.LastRound.PlayerScore, _sdEngine.LastRound.NpcScore, _sdEngine.LastRound.IsSaved, _sdEngine.LastRound.IsReversed) : _sdEngine.Forecast(_sdSelectedKind, _sdSaveArmed);
+            // The drop in a bar's line has one owner at a time: the drain while health is moving,
+            // and the forecast while a role is still being chosen. Both used to write their own
+            // numeral, which is how the bar ended up carrying two different figures at once. The
+            // drain's first frame is age zero, so the forecast holds the line only up to that point.
+            if (_sdHpAge <= 0)
+            {
+                bool showForecast = !_sdRolling && _sdAttackAge < 0;
+                _sdNpcDamageShown = showForecast ? (_sdCommitted ? _sdEngine.LastRound.DamageToNpc : forecast.DamageToNpc) : 0;
+                _sdPlayerDamageShown = showForecast ? (_sdCommitted ? _sdEngine.LastRound.DamageToPlayer : forecast.DamageToPlayer) : 0;
+                SDApplyHpLines();
+            }
             SDPlaceGhost(_sdNpcGhost, _sdEngine.NpcHp, _sdEngine.NpcMaxHp, forecast.DamageToNpc, plan);
             SDPlaceGhost(_sdPlayerGhost, _sdEngine.PlayerHp, ScoreDuel.StartingHp, forecast.DamageToPlayer, plan);
-            for (int i = 0; i < 2; i++)
+            if (_sdRerollAllowanceRound != _sdEngine.Round)
             {
+                _sdRerollAllowanceRound = _sdEngine.Round;
+                _sdRerollAllowance = _sdEngine.RerollsLeft;
+            }
+            _sdRerollAllowance = Mathf.Max(_sdRerollAllowance, _sdEngine.RerollsLeft);
+            for (int i = 0; i < 3; i++)
+            {
+                _sdRollPips[i].gameObject.SetActive(!_sdCommitted && i < _sdRerollAllowance);
                 _sdRollPips[i].color = i < _sdEngine.RerollsLeft ? SDPositive : new Color(.62f, .66f, .67f, .5f);
-                _sdRollPips[i].gameObject.SetActive(!_sdCommitted);
             }
             for (int i = 0; i < 5; i++) _sdHoldMarks[i].gameObject.SetActive(plan && _sdEngine.Held[i] && !_sdDragAiming && _sdAttackAge < 0 && !_sdFxActive);
             _sdSaveSymbol.color = _sdSaveButton.interactable ? SDPaperInk : SDMuted;
@@ -148,24 +222,53 @@ namespace ParvaMirabilia.Presentation
         }
 
         /// <summary>
-        /// Writes the health each bar is losing next to that bar while it drains, so the drop is a
-        /// number the reader can name rather than only a shrinking bar. Alpha follows the drain.
+        /// Names the health each bar is losing inside that same bar while it drains, so the drop is
+        /// a number the reader can name rather than only a shrinking bar. The figure holds steady
+        /// through the drain and leaves with the band once the bar has caught up.
         /// </summary>
         private void SDShowHpDeltas(float alpha)
         {
-            if (_sdNpcHpDelta == null) return;
+            if (_sdPlayerHpLabel == null) return;
             int npcLoss = _sdEngine != null ? Mathf.Max(0, Mathf.RoundToInt(_sdNpcHpFrom) - _sdEngine.NpcHp) : 0;
             int playerLoss = _sdEngine != null ? Mathf.Max(0, Mathf.RoundToInt(_sdPlayerHpFrom) - _sdEngine.PlayerHp) : 0;
-            SDSetHpDelta(_sdNpcHpDelta, npcLoss, SDPositive, alpha);
-            SDSetHpDelta(_sdPlayerHpDelta, playerLoss, SDNegative, alpha);
+            // Keep the loss readable through most of the drain, then settle without drift.
+            bool settled = Mathf.Clamp01(alpha * 3) > .01f;
+            _sdNpcDamageShown = settled ? npcLoss : 0;
+            _sdPlayerDamageShown = settled ? playerLoss : 0;
+            SDApplyHpLines();
+            SDAnimateHpLoss(_sdNpcBar, _sdNpcLossBand, _sdNpcHpImpactOutline,
+                _sdNpcHpFrom, _sdEngine != null ? _sdEngine.NpcHp : 0,
+                _sdEngine != null ? _sdEngine.NpcMaxHp : 1, SDEnemyColor, alpha);
+            SDAnimateHpLoss(_sdPlayerBar, _sdPlayerLossBand, _sdPlayerHpImpactOutline,
+                _sdPlayerHpFrom, _sdEngine != null ? _sdEngine.PlayerHp : 0,
+                ScoreDuel.StartingHp, SDPlayerColor, alpha);
         }
 
-        private static void SDSetHpDelta(Text label, int loss, Color color, float alpha)
+        private void SDAnimateHpLoss(Image fill, Image band, Outline outline, float before, int after,
+            int maximum, Color baseColor, float alpha)
         {
-            if (label == null) return;
-            label.text = loss > 0 && alpha > .01f ? "−" + loss : "";
-            color.a = Mathf.Clamp01(alpha);
-            label.color = color;
+            if (band == null || outline == null) return;
+            bool active = before > after && alpha > .001f;
+            band.gameObject.SetActive(active);
+            float emphasis = active ? Mathf.Clamp01(alpha * 3) : 0;
+            float loss = Mathf.Max(0, before - after);
+            int tier = loss < 30 ? 0 : loss < 50 ? 1 : loss < 80 ? 2 : 3;
+            float phase = 1 - Mathf.Clamp01(alpha);
+            float pulse = _sdReducedMotion ? 0 : Mathf.Exp(-phase * 8) * Mathf.Abs(Mathf.Sin(phase * 24));
+            Color impact = SDNegative;
+            impact.a = emphasis * (_sdReducedMotion ? .5f : .85f);
+            outline.effectColor = impact;
+            fill.color = Color.Lerp(baseColor, new Color(1, .84f, .68f),
+                active ? alpha * (_sdReducedMotion ? .15f : .62f) : 0);
+            if (!active) return;
+            float end = Mathf.Clamp01(before / Mathf.Max(1, maximum));
+            float start = Mathf.Clamp01((float)after / Mathf.Max(1, maximum));
+            band.rectTransform.anchoredPosition = new Vector2(SDHpWidth * start, 0);
+            band.rectTransform.sizeDelta = new Vector2(SDHpWidth * (end - start), SDHpThickness);
+            // Removed health cools from ivory contact to ember as the track drains.
+            band.color = Color.Lerp(new Color(1, .47f, .28f, emphasis * .75f),
+                new Color(1, .94f, .72f, emphasis), Mathf.Clamp01(alpha * alpha + pulse * .18f * tier));
+            outline.effectDistance = Vector2.one * (1.5f + pulse * (1 + tier));
         }
 
         private void SDStyleRemainingScreens()
@@ -188,6 +291,8 @@ namespace ParvaMirabilia.Presentation
             ((RectTransform)menu).sizeDelta = new Vector2(46, 38);
             SDIcon("MenuSymbol", menu, "icon-menu", Vector2.zero, 22, SDMuted);
             Transform sound = _canvasRoot.transform.Find("SoundToggle");
+            Transform volume = _canvasRoot.transform.Find("SoundVolume");
+            if (volume != null) ((RectTransform)volume).anchoredPosition = new Vector2(451, -319);
             if (sound != null)
             {
                 ((RectTransform)sound).anchoredPosition = new Vector2(554, -319);

@@ -3,7 +3,13 @@
     "rootNamespace": "ParvaMirabilia.Presentation",
     "references": [
         "ParvaMirabilia.Core",
-        "AsistBridge.Runtime"
+        "AsistBridge.Runtime",
+        "Unity.Collections",
+        "Unity.Netcode.Runtime",
+        "Unity.Networking.Transport",
+        "Unity.Services.Authentication",
+        "Unity.Services.Core",
+        "Unity.Services.Multiplayer"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
