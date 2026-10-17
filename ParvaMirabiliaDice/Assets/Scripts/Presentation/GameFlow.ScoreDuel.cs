@@ -127,8 +127,11 @@ namespace ParvaMirabilia.Presentation
                 sound.GetComponent<ButtonPalette>().Face = SDInk;
                 Transform gloss = sound.Find("Gloss");
                 if (gloss != null) gloss.gameObject.SetActive(false);
-                sound.SetAsLastSibling();
             }
+            // The SD root above was created after the audio chrome and its table is opaque,
+            // so without the raise the volume bar stays buried under it, invisible and
+            // unclickable, and the mute toggle degenerates into the only working control.
+            LiftAudioChrome();
             SDStyleRemainingScreens();
             SDSelectOpponent(0);
             SDBackToTitle();

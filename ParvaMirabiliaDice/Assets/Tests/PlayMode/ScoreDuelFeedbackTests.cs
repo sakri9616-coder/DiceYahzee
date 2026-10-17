@@ -120,6 +120,50 @@ namespace ParvaMirabilia.Quality.Tests
             yield return null;
         }
 
+        [UnityTest] public IEnumerator VolumeBarSitsAboveTheScoreDuelTable_AndThePointerReachesIt()
+        {
+            var slider = Read<Slider>("_soundSlider");
+            Assert.That(slider, Is.Not.Null);
+            Assert.That(slider.gameObject.activeInHierarchy, Is.True);
+
+            var corners = new Vector3[4];
+            ((RectTransform)slider.transform).GetWorldCorners(corners);
+            Vector2 center = RectTransformUtility.WorldToScreenPoint(null, (corners[0] + corners[2]) / 2f);
+            Assert.That(center.y, Is.InRange(0f, Screen.height));
+            Assert.That(center.x, Is.InRange(0f, Screen.width));
+
+            var hits = new System.Collections.Generic.List<RaycastResult>();
+            var pointer = new PointerEventData(EventSystem.current) { position = center };
+            EventSystem.current.RaycastAll(pointer, hits);
+            Assert.That(hits.Count, Is.GreaterThan(0));
+            GameObject top = hits[0].gameObject;
+            bool inBar = top == slider.gameObject;
+            for (var t = top.transform; t != null; t = t.parent)
+                if (t == slider.transform) { inBar = true; break; }
+            Assert.That(inBar, Is.True, "the volume bar must sit above the SD table, but " + top.name + " covers it");
+
+            // While we are here, confirm the bar still drives the real volume when it is visible.
+            float original = GameAudio.Volume;
+            bool hadContinuous = PlayerPrefs.HasKey("pv.audioVolume");
+            float stored = PlayerPrefs.GetFloat("pv.audioVolume", 0);
+            slider.value = .62f;
+            Assert.That(GameAudio.Volume, Is.EqualTo(.62f).Within(.001f), "a drag on the SD screen must reach GameAudio");
+
+            hits.Clear();
+            EventSystem.current.RaycastAll(pointer, hits);
+            top = hits[0].gameObject;
+            bool stillInBar = top == slider.gameObject;
+            for (var t = top.transform; t != null; t = t.parent)
+                if (t == slider.transform) { stillInBar = true; break; }
+            Assert.That(stillInBar, Is.True, "changing the value pulled the bar under " + top.name);
+
+            GameAudio.SetVolume(original);
+            if (hadContinuous) PlayerPrefs.SetFloat("pv.audioVolume", stored);
+            else PlayerPrefs.DeleteKey("pv.audioVolume");
+            PlayerPrefs.Save();
+            yield return null;
+        }
+
         [UnityTest] public IEnumerator BackgroundPullMovesAllDice_AndButtonOriginsCannotFire()
         {
             var battle = Root("_sdBattle");

@@ -101,8 +101,7 @@ namespace ParvaMirabilia.Presentation
             _onlineRoot.gameObject.SetActive(true);
             // The online screen is created after the persistent audio controls.
             // Keep the slider and mute icon above its full-screen table.
-            _canvasRoot.transform.Find("SoundToggle")?.SetAsLastSibling();
-            _canvasRoot.transform.Find("SoundVolume")?.SetAsLastSibling();
+            LiftAudioChrome();
             RefreshOnline();
             UpdateOnlineGuide();
         }

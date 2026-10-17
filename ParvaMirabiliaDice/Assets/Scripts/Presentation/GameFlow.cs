@@ -1101,6 +1101,19 @@ namespace ParvaMirabilia.Presentation
             RefreshSoundLabel();
         }
 
+        /// <summary>
+        /// The audio chrome (toggle + volume bar) is a sibling of the screens, built before
+        /// the later full-canvas screens drew their own opaque tables. Every screen that
+        /// covers the canvas - the SD duels, the online lobby, the SD modal dims - must
+        /// raise the pair above itself, or the volume bar vanishes under the leather and
+        /// only the mute toggle keeps working.
+        /// </summary>
+        private void LiftAudioChrome()
+        {
+            _canvasRoot.transform.Find("SoundToggle")?.SetAsLastSibling();
+            _canvasRoot.transform.Find("SoundVolume")?.SetAsLastSibling();
+        }
+
         private void StartMatch()
         {
             _matchIndex++;
