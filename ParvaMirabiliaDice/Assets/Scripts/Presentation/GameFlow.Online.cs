@@ -34,8 +34,6 @@ namespace ParvaMirabilia.Presentation
         // The drop each online bar is printing, so both readings can be reprinted together.
         private int _onlineOwnDamageShown, _onlineEnemyDamageShown;
         private Text _onlineDrawMiracle;
-        /// <summary>Explains the Chance swap where it matters: before the declaration and right after it lands.</summary>
-        private Text _onlineChanceCue;
         private ScoreHandEffectGraphic _onlineCarryEffect;
         private ScoreHandEffectGraphic _onlineImpactGraphic;
         private float _onlineCarryEffectAge = -1;
@@ -222,12 +220,6 @@ namespace ParvaMirabilia.Presentation
             _onlineGuideGraphic = guideEffects.gameObject.AddComponent<ScoreHandEffectGraphic>();
             _onlineGuideGraphic.raycastTarget = false;
             _onlineHit = OnlineText("Impact", "", 34, -204, DiceYahzeeVisuals.Brass);
-            // チャンスは被害の受け手を入れ替える。その一行は宣言する前と入れ替わった直後の両方で
-            // 必要になるため、持越ボタンの上・相手ダイスの下という中央の空きへ一行だけ置く。
-            _onlineChanceCue = OnlineText("ChanceCue", "", 15, 72, DiceYahzeeVisuals.Brass);
-            _onlineChanceCue.rectTransform.sizeDelta = new Vector2(700, 24);
-            AddOnlineTextEdge(_onlineChanceCue);
-            _onlineChanceCue.gameObject.SetActive(false);
             // An exact simultaneous raw-HP draw (winner 2) is the rare, memorable ending, so it gets
             // its own name on the table instead of being whispered in the status line. It is a plain
             // label with no graphic and no button, so it can never swallow a click.
@@ -422,7 +414,6 @@ namespace ParvaMirabilia.Presentation
             _onlineScore.gameObject.SetActive(!lobby);
             _onlineRerollDots.gameObject.SetActive(!lobby);
             _onlineHit.gameObject.SetActive(!lobby);
-            _onlineChanceCue.gameObject.SetActive(false);
             if (_onlineDrawMiracle != null)
                 _onlineDrawMiracle.gameObject.SetActive(!lobby && _onlineState.phase == (int)VersusPhase.Finished && _onlineState.winner == 2);
             for (int i = 0; i < 5; i++)
@@ -478,12 +469,6 @@ namespace ParvaMirabilia.Presentation
             _onlineSubmit.interactable = OnlineRerolling; _onlineCarry.interactable = OnlinePlanning && !mine.carryUsed;
             _onlineCarry.GetComponentInChildren<Text>().text = mine.carryUsed ? "持越　済" : _onlineCarrying ? "持越　選択中" : "持越　1";
             StyleOnlineButton(_onlineCarry, !mine.carryUsed);
-            // The declaration is private until both sides submit, so the cue names the swap while
-            // the choice is still changeable and again once the exchange has actually landed.
-            bool chanceDeclared = !resolved && (ScoreHandKind)(mine.submitted ? mine.kind : _onlineKind) == ScoreHandKind.Chance;
-            bool chanceSwapped = resolved && (mine.kind == (int)ScoreHandKind.Chance) != (enemy.kind == (int)ScoreHandKind.Chance);
-            _onlineChanceCue.text = chanceDeclared ? "チャンス：被害の受け手を入れ替える" : chanceSwapped ? "被害の受け手が入れ替わった" : "";
-            _onlineChanceCue.gameObject.SetActive(chanceDeclared || chanceSwapped);
             if (_onlineStopped) return;
             if (_onlineState.phase == (int)VersusPhase.Finished) _onlineStatus.text = _onlineState.winner == 2 ? "引き分け" : _onlineState.winner == OnlineMe ? "あなたの勝利" : "あなたの敗北";
             else if (resolved) _onlineStatus.text = _onlineState.ready[OnlineMe] ? "相手を待っています" : "ROUND " + _onlineState.round.ToString("00");

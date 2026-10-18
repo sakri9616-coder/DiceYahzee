@@ -21,17 +21,19 @@ namespace ParvaMirabilia.Presentation
             // carry button a clear ~6px gap above it instead of a 1px overlap.
             buttonRect.anchoredPosition = new Vector2(0, -230);
             buttonRect.sizeDelta = new Vector2(204, 48);
-            var label = _sdSaveButton.GetComponentInChildren<Text>();
-            label.rectTransform.anchoredPosition = new Vector2(0, 10);
-            label.rectTransform.sizeDelta = new Vector2(140, 28);
-            _sdSaveSymbol.rectTransform.anchoredPosition = new Vector2(-82, 10);
-            ((RectTransform)_sdSaveButton.transform.Find("SaveCount")).anchoredPosition = new Vector2(82, 10);
+            // The label, floppy icon and saved count are laid out once in SDBuildLiveScorecard
+            // (ScoreDuel.cs) with their optical centers measured against the rerendered glyphs;
+            // this partial only owns the button rectangle and the rack below it.
             _sdCarryRack = UiFactory.CreateRect("CarryRack", _sdSaveButton.transform,
                 new Vector2(160, 20), new Vector2(0, -13));
             _sdCarryRackGroup = _sdCarryRack.gameObject.AddComponent<CanvasGroup>();
             _sdCarryRackGroup.blocksRaycasts = false;
+            // A deeper tray than the old 0.22 wash: the rack's own gold marks (the keep ring on
+            // every die, and the standing frame the armed state draws around the row) are gold on a
+            // gold button face, close enough in luminance to vanish there. Setting the row into a
+            // shallow dark bed is what lets ivory faces and gold rings stay apart from the brass.
             var bed = UiFactory.CreatePanel("RackBed", _sdCarryRack, new Vector2(160, 20), Vector2.zero,
-                new Color(0.08f, .14f, .17f, .22f));
+                new Color(0.06f, .11f, .14f, .5f));
             bed.raycastTarget = false;
             for (int i = 0; i < 5; i++)
             {
@@ -44,6 +46,13 @@ namespace ParvaMirabilia.Presentation
             var effectRoot = UiFactory.CreateStretch("CarryEffect", _sdBattle);
             _sdCarryEffect = effectRoot.gameObject.AddComponent<ScoreHandEffectGraphic>();
             _sdCarryEffect.raycastTarget = false;
+            // Everything the HUD builds after this point is a later sibling and draws over the
+            // stroke: the dice row and the role panel with its score, the HP bars and the labels
+            // that get raised last, the hold locks, the 1100x500 impact geometry and the incoming
+            // damage line, both of which span the carry button's band. The toggle is a transient
+            // stroke over a button the player is already looking at, so it is raised once here
+            // rather than racing the rest of the build for depth.
+            effectRoot.SetAsLastSibling();
             _sdCarryRack.gameObject.SetActive(false);
         }
 
@@ -57,11 +66,14 @@ namespace ParvaMirabilia.Presentation
             if (visible)
             {
                 var faces = stored ? _sdEngine.LastRound.PlayerDice : _sdEngine.PlayerDice;
-                var held = stored ? _sdEngine.LastRound.PlayerHeld : _sdEngine.Held;
                 for (int i = 0; i < 5; i++)
                 {
                     _sdCarryDice[i].SetValue(faces[i]);
-                    _sdCarryDice[i].SetTint(DiceTint.Plain, held[i]);
+                    // The rule carries the whole hand - every die and every hold goes to the next
+                    // turn - so ringing only the engine's held dice would promise a smaller
+                    // selection than the save actually makes. The engine's own holds still decide
+                    // what next turn rerolls; on this rack, all five read as kept.
+                    _sdCarryDice[i].SetTint(DiceTint.Plain, true);
                 }
             }
             var face = _sdSaveButton.GetComponent<Image>();
@@ -124,17 +136,38 @@ namespace ParvaMirabilia.Presentation
                 }
                 _sdCarryEffect.Flush();
                 if (_sdCarryRack != null)
+                {
                     _sdCarryRack.localScale = Vector3.one * (1 + Mathf.Sin(t * Mathf.PI) * .08f);
+                    // The online table's declaration tell carried over: the racked hand shivers on
+                    // the same two axes while the carry is being taken. The landing below writes
+                    // the exact resting positions back, so nothing can drift.
+                    for (int i = 0; i < 5; i++)
+                    {
+                        var die = (RectTransform)_sdCarryRack.Find("CarryDie" + i);
+                        float phase = Time.unscaledTime * 38 + i * 1.7f;
+                        die.anchoredPosition = new Vector2((i - 2) * 27 + Mathf.Sin(phase) * 4.6f * (1 - t),
+                            Mathf.Sin(phase * .83f) * 3.0f * (1 - t));
+                    }
+                }
             }
             if (t < 1) return;
             _sdCarryToggleAge = -1;
-            if (_sdCarryRack != null) _sdCarryRack.localScale = Vector3.one;
+            if (_sdCarryRack != null)
+            {
+                _sdCarryRack.localScale = Vector3.one;
+                for (int i = 0; i < 5; i++)
+                    ((RectTransform)_sdCarryRack.Find("CarryDie" + i)).anchoredPosition = new Vector2((i - 2) * 27, 0);
+            }
             SDDrawCarrySelection();
         }
 
         private void SDDrawCarrySelection()
         {
             if (_sdCarryEffect == null) return;
+            // The toggle owns the stroke while it plays: this box is repainted on every HUD
+            // refresh, and one landing mid-animation would paste itself over the flying sparks.
+            // The toggle draws the box itself the moment it lands, so nothing is lost by waiting.
+            if (_sdCarryToggleAge >= 0) return;
             _sdCarryEffect.Clear();
             if (_sdSaveArmed && !_sdCommitted && !_sdRolling && !SDModalOpen)
             {
@@ -149,6 +182,18 @@ namespace ParvaMirabilia.Presentation
                 _sdCarryEffect.Line(new Vector2(left, bottom), new Vector2(left + length, bottom), 2.4f, ink);
                 _sdCarryEffect.Line(new Vector2(right - length, bottom), new Vector2(right, bottom), 2.4f, ink);
                 _sdCarryEffect.Line(new Vector2(right, bottom), new Vector2(right, bottom + length), 2.4f, ink);
+                // The rack states the armed hand on its own, because the toggle that would say it
+                // with sparks is skipped entirely under reduced motion. A gold capsule around the
+                // whole row (not a die at a time) is the same sentence the sparks deliver: these
+                // five travel, all of them. The per-die keeps come from the slab rings, which at
+                // this size separate cleanly above their 27-unit pitch.
+                if (_sdCarryRack != null && _sdCarryRack.gameObject.activeSelf)
+                {
+                    Color keep = UiFactory.Gold; keep.a = .85f;
+                    Vector2 rack = _sdBattle.InverseTransformPoint(_sdCarryRack.position);
+                    Vector2 half = _sdCarryRack.rect.size * .5f;
+                    _sdCarryEffect.Ellipse(rack, half.x + 8, half.y + 7, 2.4f, keep, 28);
+                }
             }
             _sdCarryEffect.Flush();
         }

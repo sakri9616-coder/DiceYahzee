@@ -545,6 +545,7 @@ namespace ParvaMirabilia.Tests
         {
             var game = new ScoreDuel(104);
             game.Roll(); SetDice(game, 1, 1, 1, 1, 1);
+            typeof(ScoreIntent).GetProperty("Kind").SetValue(game.Intent, ScoreHandKind.Pair);
             typeof(ScoreIntent).GetProperty("Score").SetValue(game.Intent, 101);
             var preview = game.Forecast(ScoreHandKind.Chance, true);
             var receipt = game.SaveHand(ScoreHandKind.Chance);
@@ -597,16 +598,28 @@ namespace ParvaMirabilia.Tests
         }
 
         [Test]
-        public void NpcChanceCategoryDoesNotDeclareThePlayerChanceEffect()
+        public void NpcChanceDeclarationInvertsDamageLikeOnline()
         {
+            // NPC Chance now fires the same XOR reversal as VersusDuel (user decision, 2026-10-18):
+            // receivers swap, so the player's own (low-aimable) score becomes their incoming damage.
             var game = new ScoreDuel(104);
             game.Roll(); SetDice(game, 6, 6, 6, 6, 6);
             typeof(ScoreIntent).GetProperty("Kind").SetValue(game.Intent, ScoreHandKind.Chance);
             typeof(ScoreIntent).GetProperty("Score").SetValue(game.Intent, 51);
             var receipt = game.Commit(ScoreHandKind.Five);
-            Assert.That(receipt.IsReversed, Is.False);
-            Assert.That(receipt.DamageToPlayer, Is.EqualTo(26));
-            Assert.That(receipt.DamageToNpc, Is.EqualTo(125));
+            Assert.That(receipt.IsReversed, Is.True);
+            Assert.That(receipt.DamageToPlayer, Is.EqualTo(125));
+            Assert.That(receipt.DamageToNpc, Is.EqualTo(26));
+
+            // Two Chances cancel out (XOR), matching the online resolution.
+            var both = new ScoreDuel(104);
+            both.Roll(); SetDice(both, 1, 1, 1, 1, 1);
+            typeof(ScoreIntent).GetProperty("Kind").SetValue(both.Intent, ScoreHandKind.Chance);
+            typeof(ScoreIntent).GetProperty("Score").SetValue(both.Intent, 51);
+            var twoChances = both.Commit(ScoreHandKind.Chance);
+            Assert.That(twoChances.IsReversed, Is.False);
+            Assert.That(twoChances.DamageToPlayer, Is.EqualTo(39));
+            Assert.That(twoChances.DamageToNpc, Is.EqualTo(13));
         }
 
         private static bool[] Available(ScoreDuel game)

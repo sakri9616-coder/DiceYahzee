@@ -1226,3 +1226,26 @@ EditMode全回帰 `logs/validation-editmode-20261017-020432-616.xml` は157/157�
 検証は次のとおり。修正前の失敗XMLは上記のとおり保存済み。修正後の対象テスト実行 `logs/validation-playmode-20261018-022232-298.xml` は25/25、全PlayMode `logs/validation-playmode-20261018-023159-978.xml` は94/94成功、全EditMode `logs/validation-editmode-20261018-023504-063.xml` は158/158成功、失敗0・スキップ0。確定ビルド `Builds/Windows-20261018-023607-623`（`build-report.json` はSucceeded、errors=0、ZIPあり）の実機スモーク `logs/volumefix-20261018/smoke/player-smoke.json` は passed=true、errors=[]。同封の `title.png` はタイトル画面の右下にスピーカーアイコンの左隣りのバーとつまみが写り、バーが存在しなかった修正前の実機写真 `logs/player-balance-20261017/smoke/title.png` と対になる。
 
 実施しなかったことを示す。バーの位置・寸法・見た目、音量の値域、デバウンス保存の挙動は変更していない。SDのモーダル（ルール・成績・練習等）を開いている間もバーはその調光より前面に出るが、これはトグルが従来から持つ挙動を音量バーにも適用した結果であり、モーダルパネルの右下角との小面積の重なりは残る（内容入力を奪うことは無い）。Legacy（非SD）の画面では、バーは今回の修正以前から最前面であり、影響対象ではない。他PC・回線・Web版・`-nographics` 以外のヘッドレス環境は、§26までと同様に未検証である。
+
+## 28. 追加演出強化と最終整備（0.10.0 / 2026-10-18）
+
+Ver.0.1 正本仕様（docs/GAME_SPEC.md）確定後の追加ポリッシュ。DeepSeek 整理済み仕様に追従し、以下の挙動を強化した。
+
+- 振り直しカウンタのゆるい点滅発光：未使用ドットのアルファ 0.92..1.0 とスケール 0.94..1.08 の呼吸。消費済みドットは 0.5 のまま残し、視認性を維持（SDTickRollPipPulse）。
+- 持越ボタンのアイコンを ▶ からフロッピーに変更し、フロッピー・ラベル・残数の縦中心を揃えた（SDBuildLiveScorecard）。
+- HP バー右外の赤見切れを除去：損傷 rim の Outline を廃止し、帯（DamageLoss）のみで表現（SDBuildHpLossBand / SDAnimateHpLoss）。
+- 練習画面と戦闘画面のアニメーションガイドを復活。練習行にバトル行と同じマウス cues を追加し、大きな役エフェクト中も入力ガイドを非表示にしない（SDTickGestureGuides）。
+- チャンス選択時の黄金発光を強化：二重リング + 6 本の上昇火花（SDTickChanceGlow）。
+- 振り直し後に良好な役が揃ったとき、その役を自動選択。チャンスは候補に含めない。より強い成形役が着地した場合は手動選択も昇格する（SDEvaluateHand / SDPromoteFormedSelection）。
+- オンラインの待ち震え（4.6px / 3.0px の二軸）を NPC 対戦の待機行とキャリーラックに流用（SDAnimateImpactPresentation / SDTickCarryToggle）。
+- 持越武装時、プレビュー内の全ダイスを黄枠で囲って全目持越を主張（SDRefresh の保持リング条件）。
+- 画面中央の得点をメタリック強化：グラデーションコントラスト増加と 3.2px のダークエッジ（SdMetallicTextEffect / SDAddMetallicScore）。
+- Z 順整備：トーストは SetAsLastSibling()、HP ラベル・音声バー・衝突フラッシュは既存の階層順を維持。影響演出の SetAsLastSibling は既存どおり。
+
+検証：
+- EditMode 158/158（logs/validation-editmode-20261018-132711-845.xml）
+- PlayMode 103/103（logs/validation-playmode-20261018-133247-756.xml）
+- スモーク logs/batch-20261018k/player-smoke.json：passed=true、398 チェック、errors=0
+- ビルド Builds/Windows-20261018-161420-863（uild-report.json = Succeeded、errors=0）
+
+SDImpactContactDelay = .30 は変更していない。全変更は base commit 75cfa87 上の未コミット作業ツリー。

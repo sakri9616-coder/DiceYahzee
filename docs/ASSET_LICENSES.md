@@ -9,6 +9,7 @@
 | UI Pack 2.0 | https://kenney.nl/assets/ui-pack | CC0 1.0 | パネル・ボタン3種、矢印1種 |
 | Input Prompts 1.5A | https://kenney.nl/assets/input-prompts | CC0 1.0 | 左クリック・右クリック・スクロールの輪郭表示3種 |
 | Game Icons 1.0 | https://kenney.nl/assets/game-icons | CC0 1.0 | 鍵・音声・消音・メニュー4種 |
+| icon-floppy (持越) | 自作 (DiceYahzee, 2026) | 自作 (486 bytes) | 保存ボタンの持越アイコン。Resources/Art/DiceYahzee/icon-floppy.png、20px PNG、表示時に着色 |
 
 原ZIPと原文ライセンスは `ThirdParty/Kenney-UIPack`、`ThirdParty/Kenney-InputPrompts`、`ThirdParty/Kenney-GameIcons` に保存。CC0のため表示クレジットは義務ではないが出典を保管する。PNG自体は未改変。Unity Spriteとして読み込み、表示時の着色・拡縮・9-sliceを許容する。パネル4種は384×128px、slice borderは四辺16px。操作アイコンは原寸36〜128pxの範囲で、小型UI向け。コントローラー商標の付いた画像・フォント・ベクター原稿はプレイヤー用Assetsに取り込まない。
 

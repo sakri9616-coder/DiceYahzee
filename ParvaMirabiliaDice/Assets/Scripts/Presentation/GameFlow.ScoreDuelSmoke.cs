@@ -262,9 +262,13 @@ namespace ParvaMirabilia.Presentation
                 "carry mode arms without resolving, spending its use, or changing the current hand");
             SmokeCheck(SDSmokeLineDamage(_sdNpcHpLabel) == savedForecast.DamageToNpc && SDSmokeLineDamage(_sdPlayerHpLabel) == savedForecast.DamageToPlayer,
                 "armed carry previews the exact normal clash damage with half-minimum absorption");
-            SmokeCapture("carry-armed");
-            yield return new WaitForSecondsRealtime(.20f);
+            yield return new WaitForSecondsRealtime(.28f);
+            // Mid-flight the sparks own the stroke; the settled armed capture waits out the
+            // .56s toggle so it records the state the player actually aims in, with its
+            // per-die gold rings instead of the flying ellipse.
             SmokeCapture("carry-collecting");
+            yield return new WaitForSecondsRealtime(.38f);
+            SmokeCapture("carry-armed");
             yield return null;
             _sdSaveButton.onClick.Invoke();
             var normalForecast = _sdEngine.Forecast(_sdSelectedKind);
@@ -346,8 +350,8 @@ namespace ParvaMirabilia.Presentation
                     "the " + kinds[fixture] + " fixture visibly plays its specific formation effect at a fixed sampled age");
                 if (fixture >= 2)
                 {
-                    SmokeCheck(!_sdGestureGraphic.gameObject.activeInHierarchy,
-                        "the enlarged " + kinds[fixture] + " effect hides input guidance immediately");
+                    SmokeCheck(_sdGestureGraphic.gameObject.activeInHierarchy,
+                        "the enlarged " + kinds[fixture] + " effect keeps input guidance visible");
                     bool labelsHidden = true;
                     foreach (var label in _sdDieLabels) labelsHidden &= !label.gameObject.activeSelf;
                     SmokeCheck(labelsHidden, "the enlarged " + kinds[fixture] + " fixture hides hold labels behind its faces");

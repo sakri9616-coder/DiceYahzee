@@ -23,9 +23,15 @@ namespace ParvaMirabilia.Quality.Tests
     {
         private GameFlow _flow;
         private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
-        private Text ChanceCue => Read<Text>("_onlineChanceCue");
         private Text DrawMiracle => Read<Text>("_onlineDrawMiracle");
         private Text Status => Read<Text>("_onlineStatus");
+
+        private static bool AnyTextNamed(string name)
+        {
+            foreach (Text text in Object.FindObjectsByType<Text>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (text.name == name) return true;
+            return false;
+        }
 
         [UnitySetUp] public IEnumerator SetUp()
         {
@@ -54,33 +60,27 @@ namespace ParvaMirabilia.Quality.Tests
         }
 
         [UnityTest]
-        public IEnumerator ChanceCueNamesTheSwapWhileDeclaredAndAgainOnceItLands()
+        public IEnumerator ChanceDeclarationInvertsTheDamageAndNamesNoCueLine()
         {
             var duel = new VersusDuel(2027, 60);
             duel.Begin();
             FinishRerolls(duel);
-            // Round still undecided and nothing declared: no cue may tease a swap.
-            Publish(duel);
-            yield return null;
-            Assert.That(ChanceCue.gameObject.activeSelf, Is.False);
-            Assert.That(ChanceCue.text, Is.Empty);
+            // The swap itself is stated by the score formula card; no floating cue line returns.
+            Assert.That(AnyTextNamed("ChanceCue"), Is.False, "the Chance cue text is retired; the rails and formula carry the rule");
 
-            // My own Chance declaration is visible to me at once and names the swap.
+            // Exactly one side declared Chance when the round lands: each seat now takes its
+            // own score as damage (the receivers swapped).
             Assert.That(duel.TrySubmit(0, 1, 11, ScoreHandKind.Chance, false, 0, out string mineError), Is.True, mineError);
-            Publish(duel);
-            yield return null;
-            Assert.That(ChanceCue.gameObject.activeSelf, Is.True, "declaring Chance must warn that the damage target will swap");
-            Assert.That(ChanceCue.text, Is.EqualTo("チャンス：被害の受け手を入れ替える"));
-
-            // Exactly one side declared Chance when the round lands: the swap has happened.
             Assert.That(duel.TrySubmit(1, 1, 11, ScoreHandKind.Pair, false, 0, out string enemyError), Is.True, enemyError);
             Assert.That(duel.Phase, Is.EqualTo(VersusPhase.Resolved));
             Publish(duel);
             yield return null;
-            Assert.That(ChanceCue.gameObject.activeSelf, Is.True);
-            Assert.That(ChanceCue.text, Is.EqualTo("被害の受け手が入れ替わった"));
+            int absorption = Math.Min(duel.LastRound.Scores[0], duel.LastRound.Scores[1]) / 2;
+            Assert.That(duel.LastRound.Damage[0], Is.EqualTo(duel.LastRound.Scores[0] - absorption), "one Chance swaps my receiver to my own score");
+            Assert.That(duel.LastRound.Damage[1], Is.EqualTo(duel.LastRound.Scores[1] - absorption));
+            Assert.That(AnyTextNamed("ChanceCue"), Is.False);
 
-            // Both sides declaring Chance cancels the swap: nobody's damage target moves.
+            // Both sides declaring Chance cancels the swap: each seat takes the other's score.
             var even = new VersusDuel(2028, 60);
             even.Begin();
             FinishRerolls(even);
@@ -89,8 +89,10 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(even.Phase, Is.EqualTo(VersusPhase.Resolved));
             Publish(even);
             yield return null;
-            Assert.That(ChanceCue.gameObject.activeSelf, Is.False, "a matched pair of declarations changes nobody's target");
-            Assert.That(ChanceCue.text, Is.Empty);
+            int shared = Math.Min(even.LastRound.Scores[0], even.LastRound.Scores[1]) / 2;
+            Assert.That(even.LastRound.Damage[0], Is.EqualTo(even.LastRound.Scores[1] - shared), "a matched pair restores the original receivers");
+            Assert.That(even.LastRound.Damage[1], Is.EqualTo(even.LastRound.Scores[0] - shared));
+            Assert.That(AnyTextNamed("ChanceCue"), Is.False, "a matched pair of declarations changes nobody's target");
         }
 
         [UnityTest]
@@ -112,7 +114,6 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(DrawMiracle.gameObject.activeSelf, Is.True, "an equal raw-health knockout deserves the 奇跡 title");
             Assert.That(DrawMiracle.text, Is.EqualTo("奇跡"));
             Assert.That(Status.text, Is.EqualTo("引き分け"));
-            Assert.That(ChanceCue.gameObject.activeSelf, Is.False, "a matched pair of Chance declarations is not a swap");
 
             // One die higher breaks the tie: player 0 wins, no miracle, plain victory text.
             var decided = new VersusDuel(8, 1);

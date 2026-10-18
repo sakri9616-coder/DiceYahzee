@@ -23,13 +23,14 @@ namespace ParvaMirabilia.Presentation
         private readonly Image[] _sdHoldMarks = new Image[5];
         // Three slots so a formed Yahtzee's bonus reroll has a home; a normal round hides the third.
         private readonly Image[] _sdRollPips = new Image[3];
+        // The pip pulse advances on its own clock so a settle or a refresh cannot restart it.
+        private float _sdRollPipPulseAge;
         // The core exposes only the rerolls still left, so the round's allowance is remembered at
         // its start and reported until the next round resets it.
         private int _sdRerollAllowance = 2;
         private int _sdRerollAllowanceRound = -1;
         private Image _sdPlayerGhost, _sdNpcGhost, _sdSaveSymbol;
         private Image _sdPlayerLossBand, _sdNpcLossBand;
-        private Outline _sdPlayerHpImpactOutline, _sdNpcHpImpactOutline;
         private Image _sdSoundSymbol;
         private float _sdLastSoundVolume = -1;
         private static readonly Color SDRailInk = new Color32(218, 229, 224, 255);
@@ -84,8 +85,8 @@ namespace ParvaMirabilia.Presentation
         {
             _sdNpcGhost = SDGhost(_sdNpcBar);
             _sdPlayerGhost = SDGhost(_sdPlayerBar);
-            _sdNpcLossBand = SDBuildHpLossBand(_sdNpcBar, out _sdNpcHpImpactOutline);
-            _sdPlayerLossBand = SDBuildHpLossBand(_sdPlayerBar, out _sdPlayerHpImpactOutline);
+            _sdNpcLossBand = SDBuildHpLossBand(_sdNpcBar);
+            _sdPlayerLossBand = SDBuildHpLossBand(_sdPlayerBar);
             foreach (var label in new[] { _sdNpcHpLabel, _sdPlayerHpLabel })
             {
                 // Health and the drop it is taking are one centred line inside the track. Warping a
@@ -98,11 +99,13 @@ namespace ParvaMirabilia.Presentation
                 label.fontSize = 18;
                 label.horizontalOverflow = HorizontalWrapMode.Overflow;
             }
-            _sdScoreNumber = SDText("ScoreNumber", _sdBattle.Find("CurrentRole"), "", 58, new Vector2(0, -29), new Vector2(240, 100), SDScoreGold);
+            _sdScoreNumber = SDText("ScoreNumber", _sdBattle.Find("CurrentRole"), "", 64, new Vector2(0, -29), new Vector2(240, 116), SDScoreGold);
             _sdScoreNumber.font = Resources.Load<Font>("Fonts/AoboshiOne-Regular") ?? _sdScoreNumber.font;
             _sdScoreNumber.verticalOverflow = VerticalWrapMode.Overflow;
             _sdScoreNumber.raycastTarget = false;
-            SDAddScoreEdge(_sdScoreNumber);
+            // A heavier dark edge than the NPC figure's keeps the player's own number the loudest
+            // object on the table.
+            SDAddMetallicScore(_sdScoreNumber, 3.2f);
             for (int i = 0; i < 3; i++)
             {
                 _sdRollPips[i] = UiFactory.CreatePanel("RollPip" + i, _sdBattle, Vector2.one * 14,
@@ -150,15 +153,12 @@ namespace ParvaMirabilia.Presentation
             return ghost;
         }
 
-        private static Image SDBuildHpLossBand(Image fill, out Outline outline)
+        private static Image SDBuildHpLossBand(Image fill)
         {
             var band = SDGhost(fill);
             band.name = "DamageLoss";
             band.raycastTarget = false;
             band.gameObject.SetActive(false);
-            outline = fill.transform.parent.gameObject.AddComponent<Outline>();
-            outline.effectDistance = new Vector2(3, -3);
-            outline.effectColor = Color.clear;
             return band;
         }
 
@@ -167,6 +167,32 @@ namespace ParvaMirabilia.Presentation
             if (kind == ScoreHandKind.Five && formed) return "150";
             float multiplier = formed ? ScoreRules.MultiplierQuarters(kind) / 4f : 1f;
             return "×" + multiplier.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// The one-glance tag a role rail prints beside its name: its multiplier, the fixed 150,
+        /// or Chance's reversal, which is named rather than numbered because it scores nothing.
+        /// </summary>
+        private static string SDRailMultiplier(ScoreHandKind kind)
+        {
+            if (kind == ScoreHandKind.Five) return "150点";
+            if (kind == ScoreHandKind.Chance) return "逆転";
+            return "×" + (ScoreRules.MultiplierQuarters(kind) / 4f).ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// A health fill/forecast/damage segment sprite authored at its own width.
+        ///
+        /// Stretching the full-bar sprite onto a narrower segment shrinks its corner radius with
+        /// the width, so the segment's near-square corner pokes past the pill's rounded cap and
+        /// the red band bleeds onto the table. Re-authoring at (rounded-down) the segment's own
+        /// width keeps the corner radius at or larger than the pill's, which can only pull the
+        /// segment inward. Rounding down to 8px steps keeps the sprite cache bounded.
+        /// </summary>
+        private static Sprite SDBarSegmentSprite(float width)
+        {
+            int quantized = Mathf.Clamp(Mathf.FloorToInt(Mathf.Max(8f, width) / 8f) * 8, 8, Mathf.RoundToInt(SDHpWidth));
+            return UiFactory.RoundedSprite(quantized, Mathf.RoundToInt(SDHpThickness));
         }
 
         private static string SDCalculation(ScoreHandKind kind, int[] dice)
@@ -211,14 +237,45 @@ namespace ParvaMirabilia.Presentation
             SDRefreshCarryPresentation();
         }
 
+        /// <summary>
+        /// Breathes the unspent reroll pips so the allowance that is still there reads at a
+        /// glance. Only unspent pips move and the alpha stays near full: a spent pip's dim
+        /// state is never mistaken for the pulse, and the pips stay legible on the leather.
+        /// </summary>
+        private void SDTickRollPipPulse(float dt)
+        {
+            if (_sdEngine == null) return;
+            if (!_sdReducedMotion) _sdRollPipPulseAge += Mathf.Max(0, dt);
+            // A slow, visible breath: the unused dot swells through scale and alpha together so
+            // the remaining rerolls claim attention without ever flashing.
+            float glow = _sdReducedMotion ? 1 : .5f + .5f * Mathf.Sin(_sdRollPipPulseAge * 4.2f);
+            for (int i = 0; i < 3; i++)
+            {
+                Image pip = _sdRollPips[i];
+                if (pip == null || !pip.gameObject.activeSelf) continue;
+                Color color = pip.color;
+                if (i < _sdEngine.RerollsLeft)
+                {
+                    // The dip stays past the readability floor (.9): the spent slot and the
+                    // tabletop must keep reading even at the bottom of the breath.
+                    color.a = .92f + .08f * glow;
+                    pip.transform.localScale = Vector3.one * (.94f + .14f * glow);
+                }
+                pip.color = color;
+            }
+        }
+
         private static void SDPlaceGhost(Image ghost, int hp, int max, int damage, bool visible)
         {
             ghost.gameObject.SetActive(visible);
             if (!visible || max <= 0) return;
             float end = Mathf.Clamp01((float)hp / max);
             float start = Mathf.Clamp01((float)(hp - damage) / max);
+            float width = SDHpWidth * (end - start);
             ghost.rectTransform.anchoredPosition = new Vector2(SDHpWidth * start, 0);
-            ghost.rectTransform.sizeDelta = new Vector2(SDHpWidth * (end - start), SDHpThickness);
+            ghost.rectTransform.sizeDelta = new Vector2(width, SDHpThickness);
+            // Authored at its own width so the forecast cap follows the pill's curve.
+            ghost.sprite = SDBarSegmentSprite(width);
         }
 
         /// <summary>
@@ -236,18 +293,18 @@ namespace ParvaMirabilia.Presentation
             _sdNpcDamageShown = settled ? npcLoss : 0;
             _sdPlayerDamageShown = settled ? playerLoss : 0;
             SDApplyHpLines();
-            SDAnimateHpLoss(_sdNpcBar, _sdNpcLossBand, _sdNpcHpImpactOutline,
+            SDAnimateHpLoss(_sdNpcBar, _sdNpcLossBand,
                 _sdNpcHpFrom, _sdEngine != null ? _sdEngine.NpcHp : 0,
                 _sdEngine != null ? _sdEngine.NpcMaxHp : 1, SDEnemyColor, alpha);
-            SDAnimateHpLoss(_sdPlayerBar, _sdPlayerLossBand, _sdPlayerHpImpactOutline,
+            SDAnimateHpLoss(_sdPlayerBar, _sdPlayerLossBand,
                 _sdPlayerHpFrom, _sdEngine != null ? _sdEngine.PlayerHp : 0,
                 ScoreDuel.StartingHp, SDPlayerColor, alpha);
         }
 
-        private void SDAnimateHpLoss(Image fill, Image band, Outline outline, float before, int after,
+        private void SDAnimateHpLoss(Image fill, Image band, float before, int after,
             int maximum, Color baseColor, float alpha)
         {
-            if (band == null || outline == null) return;
+            if (band == null) return;
             bool active = before > after && alpha > .001f;
             band.gameObject.SetActive(active);
             float emphasis = active ? Mathf.Clamp01(alpha * 3) : 0;
@@ -255,20 +312,21 @@ namespace ParvaMirabilia.Presentation
             int tier = loss < 30 ? 0 : loss < 50 ? 1 : loss < 80 ? 2 : 3;
             float phase = 1 - Mathf.Clamp01(alpha);
             float pulse = _sdReducedMotion ? 0 : Mathf.Exp(-phase * 8) * Mathf.Abs(Mathf.Sin(phase * 24));
-            Color impact = SDNegative;
-            impact.a = emphasis * (_sdReducedMotion ? .5f : .85f);
-            outline.effectColor = impact;
+            // No outline rides the track: a squared rim around a rounded pill pushes red past
+            // the corner caps, which is exactly the bleed the tracks existed to keep inside.
             fill.color = Color.Lerp(baseColor, new Color(1, .84f, .68f),
                 active ? alpha * (_sdReducedMotion ? .15f : .62f) : 0);
             if (!active) return;
             float end = Mathf.Clamp01(before / Mathf.Max(1, maximum));
             float start = Mathf.Clamp01((float)after / Mathf.Max(1, maximum));
+            float width = SDHpWidth * (end - start);
             band.rectTransform.anchoredPosition = new Vector2(SDHpWidth * start, 0);
-            band.rectTransform.sizeDelta = new Vector2(SDHpWidth * (end - start), SDHpThickness);
+            band.rectTransform.sizeDelta = new Vector2(width, SDHpThickness);
+            // The drained slice is a pill too: its own-width cap cannot poke past the track.
+            band.sprite = SDBarSegmentSprite(width);
             // Removed health cools from ivory contact to ember as the track drains.
             band.color = Color.Lerp(new Color(1, .47f, .28f, emphasis * .75f),
                 new Color(1, .94f, .72f, emphasis), Mathf.Clamp01(alpha * alpha + pulse * .18f * tier));
-            outline.effectDistance = Vector2.one * (1.5f + pulse * (1 + tier));
         }
 
         private void SDStyleRemainingScreens()

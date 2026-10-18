@@ -123,7 +123,11 @@ namespace ParvaMirabilia.Presentation
             shadow.color = new Color(0f, 0f, 0f, 0.35f);
             shadow.raycastTarget = false;
 
-            var ringRect = UiFactory.CreateRect("Ring", root, new Vector2(size + 10f, size + 10f), Vector2.zero);
+            // A hand die's ring pads it by 5 units per side; for the 19-unit carry dice that
+            // reaches past their 27-unit pitch and fuses the whole rack into one band. Tiny
+            // dice pad by 3 units instead, so five keeps read as five separate gold caps.
+            float ringPad = size < 32f ? 3f : 5f;
+            var ringRect = UiFactory.CreateRect("Ring", root, new Vector2(size + ringPad * 2f, size + ringPad * 2f), Vector2.zero);
             _ring = ringRect.gameObject.AddComponent<Image>();
             _ring.color = new Color(0f, 0f, 0f, 0f);
             _ring.raycastTarget = true;

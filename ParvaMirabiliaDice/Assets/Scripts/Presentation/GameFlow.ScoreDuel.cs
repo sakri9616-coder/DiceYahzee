@@ -39,7 +39,7 @@ namespace ParvaMirabilia.Presentation
         private Text _sdRoundLabel, _sdNpcHpLabel, _sdPlayerHpLabel, _sdIntentLabel;
         private Text _sdRoleLabel, _sdEffectLabel, _sdInstruction, _sdToast, _sdHit;
         private Text _sdResultTitle, _sdResultDetail, _sdSheetTitle, _sdSheetNote;
-        private Text _sdOpponentNote, _sdMotionLabel, _sdChanceCue;
+        private Text _sdOpponentNote, _sdMotionLabel;
         private Image _sdNpcBar, _sdPlayerBar;
         private bool _sdRolling, _sdCommitted, _sdReducedMotion, _sdSelectedManually;
         private bool _sdSaveArmed;
@@ -55,6 +55,8 @@ namespace ParvaMirabilia.Presentation
         private static readonly Color SDPositive = new Color32(203, 168, 106, 255);
         private static readonly Color SDNegative = new Color32(239, 156, 144, 255);
         private static readonly Color SDScoreGold = new Color32(240, 205, 132, 255);
+        /// <summary>Warm off-white body text for the rules panel, legible on the dark modal.</summary>
+        private static readonly Color SDCream = new Color32(246, 242, 230, 255);
         // A draw is the one result that gets its own name and its own colour.
         private static readonly Color SDMiracle = new Color32(255, 216, 82, 255);
 
@@ -150,14 +152,35 @@ namespace ParvaMirabilia.Presentation
         /// A dark edge behind a large numeral. The gold reads well on the dark table at a glance,
         /// but the thin strokes of a three-digit score fade over the leather grain without it.
         /// </summary>
-        private static void SDAddScoreEdge(Text label)
+        private static void SDAddScoreEdge(Text label, float thickness = 2f)
         {
             if (label == null) return;
             var edge = label.gameObject.AddComponent<Outline>();
             edge.effectColor = new Color(0.03f, 0.07f, 0.08f, .9f);
-            edge.effectDistance = new Vector2(2, -2);
+            edge.effectDistance = new Vector2(thickness, -thickness);
             edge.useGraphicAlpha = true;
         }
+
+        /// <summary>
+        /// Paints a score numeral as struck metal, then backs it with a thicker dark edge. The
+        /// gradient mesh effect has to be attached before the outline so the outline copies the
+        /// already-tinted glyphs and darkens only its own duplicates.
+        /// </summary>
+        private static void SDAddMetallicScore(Text label, float edge = 2.5f)
+        {
+            if (label == null) return;
+            label.gameObject.AddComponent<SdMetallicTextEffect>();
+            SDAddScoreEdge(label, edge);
+        }
+
+        /// <summary>
+        /// The central numeral keeps 64 as its everyday base and breathes with the score: small
+        /// hands sit at 60, a 100-point clash swells to 72 and the 130+ monsters reach 80, so the
+        /// figure itself carries how much the hit is worth. Only the committed display scales;
+        /// the live preview is pinned to the base, so the promise never dances in size.
+        /// </summary>
+        internal static int SDScoreFontFor(int score)
+            => score < 50 ? 60 : score < 100 ? 64 : score < 130 ? 72 : 80;
 
         private Button SDButton(string name, Transform root, Vector2 pos, Vector2 size,
             string text, int fontSize, UnityAction action, bool primary = false)
@@ -215,6 +238,10 @@ namespace ParvaMirabilia.Presentation
             SDButton("Start", _sdTitle, new Vector2(0, -162), new Vector2(320, 58), "対局開始", 23, SDStartMatch, true);
             SDButton("Practice", _sdTitle, new Vector2(-86, -241), new Vector2(148, 38), "練習", 17, SDOpenPractice);
             SDButton("Rules", _sdTitle, new Vector2(86, -241), new Vector2(148, 38), "遊び方", 17, SDOpenRules);
+            // The build tag shares the bottom chrome row with the menu and the volume bar,
+            // parked in their free span before the bar starts.
+            SDText("Version", _sdTitle, "Ver.0.1", 14, new Vector2(280, -319),
+                new Vector2(170, 26), SDMuted, TextAnchor.MiddleRight);
             SDSelectOpponent(0);
         }
 
@@ -243,12 +270,12 @@ namespace ParvaMirabilia.Presentation
             // Noto Sans JP has a taller line box on WebGL; Truncate can discard
             // the entire numeral even when its visible glyph fits this area.
             _sdNpcScoreNumber.verticalOverflow = VerticalWrapMode.Overflow;
-            SDAddScoreEdge(_sdNpcScoreNumber);
+            SDAddMetallicScore(_sdNpcScoreNumber);
             _sdToast = SDText("FormationToast", _sdBattle, "", 22, new Vector2(SDHandCenterX, -99), new Vector2(640, 38), SDPositive);
             var toastEdge = _sdToast.gameObject.AddComponent<Outline>();
             toastEdge.effectColor = new Color(0.04f, .09f, .10f, .95f);
             toastEdge.effectDistance = new Vector2(2, -2);
-            SDBuildLiveScorecard(); SDBuildNpcScorecard();
+            SDBuildLiveScorecard(); SDBuildNpcScorecard(); SDDecorateNpcRail();
             for (int i = 0; i < 5; i++)
             {
                 var die = new DiceView(_sdBattle, i, 112, "Die" + i, new Color32(255, 249, 232, 255));
@@ -271,12 +298,6 @@ namespace ParvaMirabilia.Presentation
             _sdInstruction.gameObject.SetActive(false);
             _sdHit = SDText("Damage", _sdBattle, "", 1, Vector2.zero, Vector2.zero);
             _sdHit.gameObject.SetActive(false);
-            // One short line, shown only while チャンス is declared: the result alone cannot
-            // explain why the two damage numbers landed on the other side.
-            _sdChanceCue = SDText("ChanceCue", _sdBattle, "", 15, new Vector2(-336, -237), new Vector2(336, 32),
-                SDPositive, TextAnchor.MiddleRight);
-            _sdChanceCue.raycastTarget = false;
-            SDAddScoreEdge(_sdChanceCue);
             _sdPlayerBar = SDBuildHpBar("PlayerBar", _sdBattle, SDPlayerHpY);
             _sdPlayerHpLabel = SDBuildHpLabel("PlayerHp", _sdPlayerBar);
             SDBuildHudDetails(); SDBuildHandEffects(); SDBuildGestureGuides(); SDBuildImpactPresentation();
@@ -293,7 +314,7 @@ namespace ParvaMirabilia.Presentation
             panel.raycastTarget = false;
             SDText("Heading", panel.transform, "役", 20, new Vector2(-71, 164), new Vector2(70, 28), SDRailInk, TextAnchor.MiddleLeft);
             SDIcon("WheelSymbol", panel.transform, "input-mouse-scroll", new Vector2(69, 164), 26, SDRailMuted);
-            var headRule = UiFactory.CreatePanel("HeadRule", panel.transform, new Vector2(174, 1), new Vector2(0, 143), SDRailRule);
+            var headRule = UiFactory.CreatePanel("HeadRule", panel.transform, new Vector2(186, 1), new Vector2(0, 143), SDRailRule);
             headRule.raycastTarget = false;
             for (int i = 0; i < 9; i++)
             {
@@ -302,13 +323,21 @@ namespace ParvaMirabilia.Presentation
                 button.GetComponent<Image>().sprite = null;
                 button.GetComponent<Shadow>().enabled = false;
                 _sdLiveCategories[i] = button;
-                SDText("Name", button.transform, ScoreRules.Name((ScoreHandKind)i), 16, new Vector2(-18, 0), new Vector2(126, 32), SDRailInk, TextAnchor.MiddleLeft);
-                // Scores reach three digits (ヤッツィー of sixes is 162); 40px keeps them on one line.
-                _sdLiveValues[i] = SDText("Value", button.transform, "", 18, new Vector2(66, 0), new Vector2(40, 32), SDRailInk, TextAnchor.MiddleRight);
+                // Three pinned columns: the role, its multiplier tag, then the points. The widths
+                // follow the fonts' own advances — a role name is one em per kana, and the tag and
+                // the score are measured against it — so the labels never collide however long the
+                // role's name is. Overflow keeps each single-line label off a wrap in its slot.
+                // The enemy rail adds the used check as a fourth, closing column.
+                SDText("Name", button.transform, ScoreRules.Name((ScoreHandKind)i), 16, new Vector2(-23, 0), new Vector2(116, 32), SDRailInk, TextAnchor.MiddleLeft)
+                    .horizontalOverflow = HorizontalWrapMode.Overflow;
+                SDText("Multiplier", button.transform, SDRailMultiplier((ScoreHandKind)i), 11, new Vector2(34, 0), new Vector2(34, 28), SDRailMuted, TextAnchor.MiddleRight)
+                    .horizontalOverflow = HorizontalWrapMode.Overflow;
+                _sdLiveValues[i] = SDText("Value", button.transform, "", 15, new Vector2(68, 0), new Vector2(30, 32), SDRailInk, TextAnchor.MiddleRight);
                 _sdLiveValues[i].font = Resources.Load<Font>("Fonts/AoboshiOne-Regular") ?? _sdLiveValues[i].font;
+                _sdLiveValues[i].horizontalOverflow = HorizontalWrapMode.Overflow;
                 _sdLiveMarkers[i] = UiFactory.CreatePanel("Selected", button.transform, new Vector2(3, 30), new Vector2(-84, 0), SDPositive);
                 _sdLiveMarkers[i].raycastTarget = false;
-                var rule = UiFactory.CreatePanel("RowRule", panel.transform, new Vector2(168, 1), new Vector2(0, 109 - i * 37), SDRailRule);
+                var rule = UiFactory.CreatePanel("RowRule", panel.transform, new Vector2(186, 1), new Vector2(0, 109 - i * 37), SDRailRule);
                 rule.raycastTarget = false;
             }
             _sdSaveButton = SDButton("SaveHand", _sdBattle, new Vector2(0, -232), new Vector2(190, 52), "持越", 19, SDSaveHand, true);
@@ -316,13 +345,60 @@ namespace ParvaMirabilia.Presentation
             _sdSaveButton.GetComponent<ButtonPalette>().Face = DiceYahzeeVisuals.Brass;
             _sdSaveButton.GetComponent<ButtonPalette>().Label = SDPaperInk;
             var saveLabel = _sdSaveButton.GetComponentInChildren<Text>();
-            saveLabel.rectTransform.anchoredPosition = new Vector2(0, 12);
-            saveLabel.rectTransform.sizeDelta = new Vector2(108, 28);
-            _sdSaveSymbol = SDIcon("SaveSymbol", _sdSaveButton.transform, "icon-arrow-right", new Vector2(-76, 12), 21, SDPaperInk);
-            SDText("SaveCount", _sdSaveButton.transform, "1", 16, new Vector2(77, 12), new Vector2(22, 27), SDPaperInk);
+            // Optical vertical alignment, measured from the rendered button (device rows are the
+            // same at 1280x720): CJK glyphs settle about 2px below their box center at 19px, so
+            // the label keeps y 10 (optical center row 584) and the icon and the count land on
+            // that row rather than on their own anchor row: y 7 centers the sprite body, y 9 the
+            // numeral. Measured in the first build (icon row 580.8, label 584, count 583).
+            saveLabel.rectTransform.anchoredPosition = new Vector2(0, 10);
+            saveLabel.rectTransform.sizeDelta = new Vector2(140, 28);
+            // A floppy reads as "store this hand" where the arrow read as "continue"; the three
+            // pieces are spaced so the icon, label and count sit evenly on the 204px button.
+            _sdSaveSymbol = SDIcon("SaveSymbol", _sdSaveButton.transform, "icon-floppy", new Vector2(-82, 10), 20, SDPaperInk);
+            SDText("SaveCount", _sdSaveButton.transform, "1", 16, new Vector2(82, 9), new Vector2(22, 27), SDPaperInk);
             _sdSaveNote = SDText("SaveCost", _sdBattle, "", 1, Vector2.zero, Vector2.zero);
             _sdSaveNote.gameObject.SetActive(false);
             SDBuildCarryPresentation();
+        }
+
+        /// <summary>
+        /// The enemy rail is built by its own partial, so its row is rebalanced here around the
+        /// same columns the player rail uses: the role, its multiplier tag, the points, then the
+        /// used check that closes the row. Only layout changes; the child names stay put.
+        /// </summary>
+        private void SDDecorateNpcRail()
+        {
+            Transform rail = _sdBattle.Find("NpcScorecard");
+            if (rail == null) return;
+            // The enemy rail is built by its own partial, so its dividers are widened here to the
+            // span the player rail uses before its row is laid out again.
+            foreach (Transform child in rail)
+                if (child.name == "HeadRule" || child.name == "RowRule")
+                    ((RectTransform)child).sizeDelta = new Vector2(186, 1);
+            for (int i = 0; i < 9; i++)
+            {
+                Transform row = rail.Find("NpcCategory" + i);
+                if (row == null) continue;
+                var name = row.Find("Name").GetComponent<Text>();
+                name.rectTransform.anchoredPosition = new Vector2(-23, 0);
+                name.rectTransform.sizeDelta = new Vector2(116, 32);
+                name.horizontalOverflow = HorizontalWrapMode.Overflow;
+                var value = row.Find("Value").GetComponent<Text>();
+                value.rectTransform.anchoredPosition = new Vector2(68, 0);
+                value.rectTransform.sizeDelta = new Vector2(30, 32);
+                value.fontSize = 15;
+                value.horizontalOverflow = HorizontalWrapMode.Overflow;
+                SDText("Multiplier", row, SDRailMultiplier((ScoreHandKind)i), 11,
+                    new Vector2(34, 0), new Vector2(34, 28), SDRailMuted, TextAnchor.MiddleRight)
+                    .horizontalOverflow = HorizontalWrapMode.Overflow;
+                // The check closes the row after the score: a column inside the name or the tag
+                // would be crowded by the longest role name or by the widest multiplier.
+                var used = row.Find("Used").GetComponent<Text>();
+                used.rectTransform.anchoredPosition = new Vector2(89, 0);
+                used.rectTransform.sizeDelta = new Vector2(12, 28);
+                used.fontSize = 12;
+                used.horizontalOverflow = HorizontalWrapMode.Overflow;
+            }
         }
 
         private Image SDBuildHpBar(string name, Transform root, float y)
@@ -375,35 +451,35 @@ namespace ParvaMirabilia.Presentation
         private void SDBuildRules()
         {
             _sdRules = SDModal("SDRules", "遊び方", new Vector2(980, 660));
-            string health = "自分の体力は" + ScoreDuel.StartingHp + "。相手は難易度で";
-            for (int i = 0; i < SDOpponentProfiles.Length; i++)
-                health += (i == 0 ? "" : "／") + SDOpponentProfiles[i].NpcHp;
-            health += "。\n";
             Text steps = SDText("Steps", _sdRules,
-                "① クリック・横ドラッグで残す目を選ぶ。右クリックで振り直す。最大2回。\n" +
-                "② 役をクリック・ホイールで選ぶ。得点＝（20＋出目合計）×倍率、端数切捨て。\n" +
-                "③ 下へ引いて離すと発射。短い操作はキャンセル。衝突後は画面クリックで次へ。\n" +
-                "双方が攻撃。被害＝自分の得点−低い得点の半分（切捨て）。\n" +
-                "例：自分56・相手70なら、相手へ28・自分へ42。赤いHP部分がその被害。\n" +
-                "チャンスは被害の受け手を入れ替える。ヤッツィー成立で次のターンの振り直し+1回。\n" +
-                "各役は1回。9役を使い切ると再使用。未成立は倍率1。錠前は保持、丸2個は残り再投。\n" +
-                health +
-                "どちらかが0でKO。双方KOは超過被害の少ない側が勝ち、同じなら引き分け。\n" +
-                "持越は対局中1回。今回の被害と次ターンの出目を予告し、もう一度押すと解除。\n" +
-                "確定すると双方が通常どおり被害を受け、次は同じ目と保持から2回再投。\n" +
-                "相手も実際の乱数で振る。全難易度が上級の読みで最善手を比較する。",
-                15, new Vector2(0, 126), new Vector2(900, 254), null, TextAnchor.UpperLeft);
+                "① クリック・横ドラッグで残す目を選択します。\n" +
+                "② 右クリックで最大2回振り直せます。\n" +
+                "③ クリック・ホイールで役を選択します。\n" +
+                "④ 下にドラッグしてリリースして攻撃。\n" +
+                "⑤ それぞれの役は、一度使うと使えなくなります。",
+                15, new Vector2(0, 192), new Vector2(900, 116), SDCream, TextAnchor.UpperLeft);
             steps.verticalOverflow = VerticalWrapMode.Overflow;
+            // The scoring line is the one fact a player checks mid-match, so it is the loudest
+            // single line on the panel rather than one sentence inside the instructions.
+            SDText("Formula", _sdRules, "得点＝（20＋出目合計）×倍率、端数切捨て。", 22,
+                new Vector2(0, 100), new Vector2(900, 36), SDScoreGold);
+            SDText("DamageHeading", _sdRules, "ダメージ計算", 16, new Vector2(-330, 56), new Vector2(200, 26), SDPositive, TextAnchor.MiddleLeft);
+            SDText("Damage", _sdRules,
+                "ダメージ＝自分の得点−低い得点の半分。\n" +
+                "例：自分56・相手70なら相手へ28・自分へ42。\n" +
+                "チャンス：ダメージ計算式を反転させます。\n" +
+                "ヤッツィー：次の振りなおし回数+1",
+                14, new Vector2(0, -4), new Vector2(860, 84), SDCream, TextAnchor.UpperLeft);
             string[] names = ScoreRules.Names;
             string[] values = { "同じ目2つ · ×1.5", "ペア2組 · ×2", "同じ目3つ · ×2", "3つ＋2つ · ×2.5",
                 "4連続 · ×2", "同じ目4つ · ×3", "5連続 · ×2.5", "同じ目5つ · 150点", "条件なし · ×1" };
             for (int i = 0; i < 9; i++)
             {
                 int col = i / 5, row = i % 5;
-                SDText("RuleKind" + i, _sdRules, names[i], 17,
-                    new Vector2(-330 + col * 470, -36 - row * 34), new Vector2(175, 30), SDPositive, TextAnchor.MiddleLeft);
-                SDText("RuleScore" + i, _sdRules, values[i], 17,
-                    new Vector2(-122 + col * 470, -36 - row * 34), new Vector2(242, 30), SDMuted, TextAnchor.MiddleLeft);
+                SDText("RuleKind" + i, _sdRules, names[i], 15,
+                    new Vector2(-330 + col * 470, -72 - row * 28), new Vector2(175, 24), SDPositive, TextAnchor.MiddleLeft);
+                SDText("RuleScore" + i, _sdRules, values[i], 15,
+                    new Vector2(-122 + col * 470, -72 - row * 28), new Vector2(242, 24), SDMuted, TextAnchor.MiddleLeft);
             }
             SDButton("Practice", _sdRules, new Vector2(-165, -259), new Vector2(290, 46), "練習", 19, SDOpenPractice);
             SDButton("CloseRules", _sdRules, new Vector2(165, -259), new Vector2(290, 46), "戻る", 20, SDCloseModals, true);
@@ -668,7 +744,8 @@ namespace ParvaMirabilia.Presentation
             ScoreOffer formation = default;
             foreach (ScoreOffer offer in _sdEngine.Offers)
             {
-                if (!offer.IsAvailable) continue;
+                // Chance is a declaration, not a suggestion: the auto-pick never lands there.
+                if (offer.Kind == ScoreHandKind.Chance || !offer.IsAvailable) continue;
                 if (!found || offer.Score > best.Score) { found = true; best = offer; }
                 if (offer.Kind != ScoreHandKind.Chance && offer.IsFormed && offer.Score > 0 &&
                     (!foundFormation || offer.Score > formation.Score))
@@ -687,6 +764,30 @@ namespace ParvaMirabilia.Presentation
             _sdToast.color = SDPositive;
             GameAudio.Play("formation");
             SDPlayHandEffects(formation);
+        }
+
+        /// <summary>
+        /// After the player's rerolls settle, move the selection to the strongest formed hand the
+        /// new dice make when it beats what is selected - a reroll that lands a better hand may
+        /// promote even a manual pick, and Chance is never the beneficiary: it reverses damage
+        /// rather than scoring.
+        /// </summary>
+        private void SDPromoteFormedSelection()
+        {
+            if (_sdEngine == null) return;
+            bool found = false;
+            ScoreOffer best = default;
+            int current = 0;
+            foreach (ScoreOffer offer in _sdEngine.Offers)
+            {
+                if (offer.Kind == _sdSelectedKind) current = offer.Score;
+                if (offer.Kind == ScoreHandKind.Chance || !offer.IsFormed || !offer.IsAvailable || offer.Score <= 0) continue;
+                if (!found || offer.Score > best.Score) { found = true; best = offer; }
+            }
+            if (!found || best.Score <= current) return;
+            _sdSelectedKind = best.Kind;
+            // The suggestion owns the preview again after taking the wheel back.
+            _sdSelectedManually = false;
         }
 
         private void SDCommit()
@@ -813,7 +914,10 @@ namespace ParvaMirabilia.Presentation
             for (int i = 0; i < 5; i++)
             {
                 _sdDice[i].SetValue(_sdEngine.PlayerDice[i]);
-                _sdDice[i].SetTint(DiceTint.Plain, !_sdCommitted && _sdEngine.Held[i]);
+                // The rule carries the whole hand - every die and every hold goes to the next
+                // turn - so with the save armed every die rings kept: the row must not promise a
+                // smaller selection (held dice alone) than the save actually makes.
+                _sdDice[i].SetTint(DiceTint.Plain, !_sdCommitted && (_sdEngine.Held[i] || _sdSaveArmed));
                 _sdDice[i].SetInteractable(!_sdRolling && !_sdCommitted && !SDModalOpen);
                 _sdDieLabels[i].text = "";
             }
@@ -826,7 +930,7 @@ namespace ParvaMirabilia.Presentation
             if (_sdRolling)
             {
                 _sdRoleLabel.text = ""; _sdScoreNumber.text = "—"; _sdBreakdown.text = "";
-                _sdChanceCue.text = "";
+                _sdScoreNumber.fontSize = 64;
                 return;
             }
             ScoreHandKind kind = _sdCommitted ? _sdEngine.LastRound.PlayerKind : _sdSelectedKind;
@@ -834,8 +938,8 @@ namespace ParvaMirabilia.Presentation
             int score = _sdCommitted ? _sdEngine.LastRound.PlayerScore : _sdEngine.Forecast(kind).Score;
             _sdRoleLabel.text = ScoreRules.Name(kind);
             _sdScoreNumber.text = score.ToString();
+            _sdScoreNumber.fontSize = _sdCommitted ? SDScoreFontFor(score) : 64;
             _sdBreakdown.text = SDCalculation(kind, dice);
-            _sdChanceCue.text = kind == ScoreHandKind.Chance ? "チャンス：被害の受け手を入れ替え" : "";
         }
 
         private static int SDTotal(System.Collections.Generic.IReadOnlyList<int> dice)
@@ -866,8 +970,14 @@ namespace ParvaMirabilia.Presentation
             if (_sdEngine == null) return;
             _sdPlayerHpShown = player;
             _sdNpcHpShown = npc;
-            _sdPlayerBar.rectTransform.sizeDelta = new Vector2(SDHpWidth * Mathf.Clamp01(player / ScoreDuel.StartingHp), SDHpThickness);
-            _sdNpcBar.rectTransform.sizeDelta = new Vector2(SDHpWidth * Mathf.Clamp01(npc / _sdEngine.NpcMaxHp), SDHpThickness);
+            float playerWidth = SDHpWidth * Mathf.Clamp01(player / ScoreDuel.StartingHp);
+            float npcWidth = SDHpWidth * Mathf.Clamp01(npc / _sdEngine.NpcMaxHp);
+            _sdPlayerBar.rectTransform.sizeDelta = new Vector2(playerWidth, SDHpThickness);
+            _sdNpcBar.rectTransform.sizeDelta = new Vector2(npcWidth, SDHpThickness);
+            // The fill's cap is re-authored at its own width so it follows the pill's corner
+            // instead of poking past it while a bar drains through the rounded end.
+            _sdPlayerBar.sprite = SDBarSegmentSprite(playerWidth);
+            _sdNpcBar.sprite = SDBarSegmentSprite(npcWidth);
             SDApplyHpLines();
         }
 
@@ -943,11 +1053,13 @@ namespace ParvaMirabilia.Presentation
             foreach (DiceView die in _sdNpcDice) { npcMoving |= die.IsRolling; die.Tick(dt); }
             if (npcMoving) SDRefresh();
             SDTickHandEffects(dt);
+            SDTickChanceGlow(dt);
             SDRefreshDieLabelsVisibility();
             SDTickAttackMotion(dt);
             SDTickCarryReturn(dt);
             SDTickCarryToggle(dt);
             SDTickGestureGuides(dt);
+            SDTickRollPipPulse(dt);
             foreach (DiceView die in _sdPracticeDice) die.Tick(dt);
             if (_sdPracticeRolling)
             {
@@ -968,6 +1080,7 @@ namespace ParvaMirabilia.Presentation
             {
                 _sdRolling = false;
                 SDEvaluateHand(true);
+                SDPromoteFormedSelection();
                 SDRefresh();
             }
             if (_sdToastAge >= 0)

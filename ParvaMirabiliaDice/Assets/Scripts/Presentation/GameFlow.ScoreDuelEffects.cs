@@ -20,6 +20,11 @@ namespace ParvaMirabilia.Presentation
         private readonly Vector2[] _sdFxSparkOrigin = new Vector2[28];
         private readonly Vector2[] _sdFxSparkVelocity = new Vector2[28];
         private Image _sdFxTraceHead;
+        // The Chance glow lives with the hand effects: same stretch parent, same stroke graphic,
+        // but its own lifetime so a formation effect never leaves it behind.
+        private RectTransform _sdChanceGlowRoot;
+        private ScoreHandEffectGraphic _sdChanceGlowGeometry;
+        private float _sdChanceGlowAge;
         private ScoreHandKind _sdFxLastKind;
         private int _sdFxTier, _sdFxMask, _sdFxPathCount, _sdFxSparkCount, _sdFxScaledMask, _sdFxPositionedMask;
         private float _sdFxAge = -1, _sdFxDuration;
@@ -44,6 +49,14 @@ namespace ParvaMirabilia.Presentation
             // Geometry sits behind the faces: a traced line never obscures their pips. Its
             // travelling head and sparks show the ordered visits between the physical dice.
             _sdFxRoot.SetSiblingIndex(firstDie);
+            // A gold ring gathers the physical dice while Chance is the chosen role. It is the one
+            // role whose payoff is not its own score, so the hand it will reverse is named in place.
+            // It sits behind the faces, level with the other hand effects, and starts hidden.
+            _sdChanceGlowRoot = UiFactory.CreateStretch("ChanceGlow", _sdBattle);
+            _sdChanceGlowGeometry = _sdChanceGlowRoot.gameObject.AddComponent<ScoreHandEffectGraphic>();
+            _sdChanceGlowGeometry.raycastTarget = false;
+            _sdChanceGlowRoot.SetSiblingIndex(firstDie);
+            _sdChanceGlowRoot.gameObject.SetActive(false);
             for (int i = 0; i < _sdFxSparks.Length; i++)
             {
                 var spark = UiFactory.CreatePanel("HandSpark" + i, _sdFxRoot,
@@ -73,7 +86,6 @@ namespace ParvaMirabilia.Presentation
                 _sdFxTier == 1 ? .55f : _sdFxTier == 2 ? .74f : _sdFxTier == 3 ? .84f : 1.02f;
             _sdFxAge = 0;
             _sdFxActive = true;
-            if (_sdFxTier >= 2 && _sdGestureGraphic != null) _sdGestureGraphic.gameObject.SetActive(false);
             _sdFxRoot.gameObject.SetActive(true);
             _sdFxPathCount = 0;
             _sdFxGroups[0] = _sdFxGroups[1] = 0;
@@ -171,6 +183,53 @@ namespace ParvaMirabilia.Presentation
                 color.a = (1 - t) * fade * .9f;
                 spark.color = color;
             }
+        }
+
+        /// <summary>
+        /// While Chance is the chosen role, a gold ring breathes around every physical die and
+        /// short sparks rise from the faces. The cue is drawn on the hand itself so the reversal
+        /// reads against the dice it will be applied to. Reduced motion holds a steady ring.
+        /// </summary>
+        private void SDTickChanceGlow(float dt)
+        {
+            if (_sdChanceGlowRoot == null) return;
+            if (_sdSelectedKind != ScoreHandKind.Chance || !SDCanPlan || _sdFxActive)
+            {
+                if (_sdChanceGlowRoot.gameObject.activeSelf) SDResetChanceGlow();
+                return;
+            }
+            _sdChanceGlowAge += Mathf.Max(0, dt);
+            float breathe = _sdReducedMotion ? 0 : Mathf.Sin(_sdChanceGlowAge * 2.4f);
+            Color ring = SDScoreGold;
+            ring.a = _sdReducedMotion ? .8f : .78f + breathe * .14f;
+            _sdChanceGlowGeometry.Clear();
+            for (int i = 0; i < 5; i++)
+            {
+                if (_sdFxDice[i] == null) continue;
+                Vector2 center = _sdChanceGlowRoot.InverseTransformPoint(_sdFxDice[i].TransformPoint(Vector3.zero));
+                _sdChanceGlowGeometry.Ring(center, 66 + breathe * 4, _sdReducedMotion ? 2f : 3f, ring, 24);
+                _sdChanceGlowGeometry.Ring(center, 52, _sdReducedMotion ? 1.5f : 2f, ring, 20);
+                if (_sdReducedMotion) continue;
+                for (int s = 0; s < 6; s++)
+                {
+                    // Sparks start at a different point of their rise per die, so the hand does not
+                    // blink on and off as one piece. They clear the face's own top edge.
+                    float phase = Mathf.Repeat(_sdChanceGlowAge * .5f + s * .17f + i * .12f, 1f);
+                    Vector2 at = center + new Vector2((s - 2.5f) * 11f, 50 + phase * 34f);
+                    Color spark = SDScoreGold;
+                    spark.a = (1 - phase) * .9f;
+                    _sdChanceGlowGeometry.Line(at, at + new Vector2(0, 11), 2.2f, spark);
+                }
+            }
+            _sdChanceGlowGeometry.Flush();
+            _sdChanceGlowRoot.gameObject.SetActive(true);
+        }
+
+        private void SDResetChanceGlow()
+        {
+            _sdChanceGlowAge = 0;
+            if (_sdChanceGlowGeometry != null) { _sdChanceGlowGeometry.Clear(); _sdChanceGlowGeometry.Flush(); }
+            if (_sdChanceGlowRoot != null) _sdChanceGlowRoot.gameObject.SetActive(false);
         }
 
         private void SDDrawStraight(float progress, float fade)
@@ -372,6 +431,42 @@ namespace ParvaMirabilia.Presentation
                 vertex.position = stroke.A - normal; helper.AddVert(vertex);
                 helper.AddTriangle(first, first + 1, first + 2);
                 helper.AddTriangle(first + 2, first + 3, first);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Struck metal for a score numeral: a top-lit gold gradient is written into the glyph's own
+    /// vertices, so the figure reads as a carved object rather than as flat paint. It runs as a
+    /// mesh effect rather than as a second, tinted copy, which keeps any outline added afterwards
+    /// seeing one tinted glyph to darken instead of two overlapping ones.
+    /// </summary>
+    internal sealed class SdMetallicTextEffect : BaseMeshEffect
+    {
+        private static readonly Color32 MetalTop = new Color32(255, 242, 204, 255);
+        private static readonly Color32 MetalBottom = new Color32(172, 119, 28, 255);
+
+        public override void ModifyMesh(VertexHelper helper)
+        {
+            if (helper == null || helper.currentVertCount == 0) return;
+            float min = float.MaxValue, max = float.MinValue;
+            UIVertex vertex = UIVertex.simpleVert;
+            for (int i = 0; i < helper.currentVertCount; i++)
+            {
+                helper.PopulateUIVertex(ref vertex, i);
+                min = Mathf.Min(min, vertex.position.y);
+                max = Mathf.Max(max, vertex.position.y);
+            }
+            float span = max - min;
+            if (span < .001f) return;
+            for (int i = 0; i < helper.currentVertCount; i++)
+            {
+                helper.PopulateUIVertex(ref vertex, i);
+                Color32 metal = Color32.Lerp(MetalBottom, MetalTop, (vertex.position.y - min) / span);
+                // A fade on the label must survive the recolour, so the glyph's alpha is kept.
+                metal.a = (byte)(metal.a * vertex.color.a / 255);
+                vertex.color = metal;
+                helper.SetUIVertex(vertex, i);
             }
         }
     }

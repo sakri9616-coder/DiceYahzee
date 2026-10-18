@@ -224,6 +224,10 @@ namespace ParvaMirabilia.Core
                 Add(table, offset, ScoreHandKind.Four, four == 0 ? 0 : FirstBits(masks[four], 4), total);
                 Add(table, offset, ScoreHandKind.LargeStraight, largeMask, total);
                 Add(table, offset, ScoreHandKind.Five, five == 0 ? 0 : 31, total);
+                // DESIGN INTENT (kept by user decision, 2026-10-18): Chance is unconditionally offered from
+                // any roll and is always flagged formed with a full mask, so an unformed hand qualifies too.
+                // The NPC may therefore declare Chance; do not make IsAvailable/IsFormed conditional on the
+                // dice actually forming a hand. See the matching note on ScoreHoldPolicy.Utility.
                 table[offset + (int)ScoreHandKind.Chance] = new ScoreOffer(ScoreHandKind.Chance, BasePoints + total, 31, true, true, BasePoints + total);
             }
             return table;
@@ -285,6 +289,10 @@ namespace ParvaMirabilia.Core
         internal static float Utility(ScoreOffer offer, int round, NpcPersonality personality)
         {
             float value = offer.Score;
+            // DESIGN INTENT (kept by user decision, 2026-10-18): the NPC may declare Chance even from an
+            // unformed hand; the damage-receiver inversion then fires (Forecast XORs both kinds, matching
+            // VersusDuel.Resolve) and invites the low-aiming counterplay. Do not remove Chance from the
+            // NPC's candidate set or gate it on offer.IsFormed.
             if (offer.Kind == ScoreHandKind.Chance && round < 5) value -= 4f;
             if (personality == NpcPersonality.Aggressive) value += offer.Score * offer.Score * 0.0025f;
             if (personality == NpcPersonality.Careful && !offer.IsFormed) value -= 8f;
@@ -441,7 +449,13 @@ namespace ParvaMirabilia.Core
             int index = ScoreRules.CheckKind(kind);
             if (_playerUsed[index]) throw new InvalidOperationException("その役はこの対戦で使用済みです");
             if (saved && SavedHandUsed) throw new InvalidOperationException("出目の保存はこの対戦で1回だけです");
-            return new ScoreForecast(ScoreRules.Evaluate(kind, PlayerDice).Score, Intent.Score, saved, kind == ScoreHandKind.Chance);
+            // Damage-receiver inversion follows the XOR of both declarations, matching
+            // VersusDuel.Resolve (which writes the same XOR as a bool inequality): one
+            // Chance on either side swaps the receivers, two Chances cancel out. NPC
+            // Chance declarations are intentional (2026-10-18); they punish high NPC
+            // scores and reward the low-aiming counterplay noted in ScoreHoldPolicy.Utility.
+            bool reversed = (kind == ScoreHandKind.Chance) != (Intent.Kind == ScoreHandKind.Chance);
+            return new ScoreForecast(ScoreRules.Evaluate(kind, PlayerDice).Score, Intent.Score, saved, reversed);
         }
 
         public ScoreRound Commit(ScoreHandKind kind)
@@ -461,6 +475,9 @@ namespace ParvaMirabilia.Core
         private ScoreRound Resolve(ScoreHandKind kind, ScoreForecast forecast, bool saved)
         {
             var offer = ScoreRules.Evaluate(kind, PlayerDice);
+            // Ledger: both sides own the same nine-slot inventory and each declaration marks exactly its own
+            // kind, Chance included as slot 8. RefreshInventoryIfEmpty clears a side only once all nine are
+            // set, so an NPC Chance spend cannot desync a count; there is no double count or off-by-one here.
             _playerUsed[(int)kind] = true;
             _npcUsed[(int)Intent.Kind] = true;
             _playerNextRerollBonus = kind == ScoreHandKind.Five && offer.IsFormed;

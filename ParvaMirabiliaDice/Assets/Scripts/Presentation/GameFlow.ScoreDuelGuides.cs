@@ -7,6 +7,7 @@ namespace ParvaMirabilia.Presentation
     {
         private ScoreHandEffectGraphic _sdGestureGraphic, _sdPracticeGestureGraphic;
         private Text _sdPracticeGestureText;
+        private Image _sdPracticeMouse;
         private Image _sdGuideMouse;
         private Image _sdWheelMouse;
         private ScoreHandEffectGraphic _sdWheelGraphic;
@@ -53,7 +54,7 @@ namespace ParvaMirabilia.Presentation
             _sdGestureGraphic = SDCreateGuide(_sdBattle);
             _sdMouseLeft = DiceYahzeeVisuals.LoadSprite("Art/DiceYahzee/input-mouse-left");
             _sdMouseRight = DiceYahzeeVisuals.LoadSprite("Art/DiceYahzee/input-mouse-right");
-            _sdGuideMouse = SDIcon("MouseInput", _sdGestureGraphic.transform, "input-mouse-left", new Vector2(SDGuideX, 25), 36, SDPositive);
+            _sdGuideMouse = SDIcon("MouseInput", _sdGestureGraphic.transform, "input-mouse-left", new Vector2(SDGuideX, 25), 40, SDPositive);
             _sdWheelMouse = _sdBattle.Find("ScoreChoices/WheelSymbol").GetComponent<Image>();
             var wheelRoot = UiFactory.CreateStretch("WheelMotion", _sdBattle.Find("ScoreChoices"));
             _sdWheelGraphic = wheelRoot.gameObject.AddComponent<ScoreHandEffectGraphic>();
@@ -67,6 +68,11 @@ namespace ParvaMirabilia.Presentation
             _sdPracticeGestureText = SDText("GestureInstruction", _sdPractice, "", 18,
                 new Vector2(0, -155), new Vector2(800, 40), SDPositive);
             _sdPracticeGestureGraphic = SDCreateGuide(_sdPractice);
+            // The practice row gets the battle row's animated mouse tell: the chevrons alone
+            // left the input they meant to picture off the screen. It rides 60px above the
+            // drag chevrons' origin, mirroring the 25/-35 pair on the battle anchor.
+            _sdPracticeMouse = SDIcon("PracticeMouseInput", _sdPracticeGestureGraphic.transform,
+                "input-mouse-left", new Vector2(330, 134), 40, SDPositive);
         }
 
         private void SDRefreshGestureInstruction()
@@ -79,7 +85,9 @@ namespace ParvaMirabilia.Presentation
         {
             _sdGuideAge += dt;
             bool next = SDCanAdvanceTable;
-            bool battle = next || (SDCanPlan && !(_sdFxActive && _sdFxTier >= 2));
+            // The guide rides every planning frame: big wrapped hand effects no longer clear it,
+            // because a hidden tell reads as a missing guide.
+            bool battle = next || SDCanPlan;
             _sdGestureGraphic.gameObject.SetActive(battle);
             if (battle)
             {
@@ -89,8 +97,10 @@ namespace ParvaMirabilia.Presentation
                 _sdGuideMouse.sprite = reroll ? _sdMouseRight : _sdMouseLeft;
                 float phase = Mathf.Repeat(_sdGuideAge, 1.8f) / 1.8f;
                 float down = Mathf.SmoothStep(0, 1, Mathf.Clamp01((phase - .12f) / .56f));
+                // A floor keeps the mouse on screen through the whole cycle. The pulse still
+                // reads as motion, but the icon never fades into the table between beats.
                 float visibility = _sdReducedMotion || reroll || next ? 1 :
-                    Mathf.Min(Mathf.Clamp01(phase / .08f), 1 - Mathf.Clamp01((phase - .80f) / .12f));
+                    Mathf.Max(.55f, Mathf.Min(Mathf.Clamp01(phase / .08f), 1 - Mathf.Clamp01((phase - .80f) / .12f)));
                 float pull = _sdReducedMotion || reroll || next ? 0 : 18 * down;
                 float press = _sdReducedMotion ? 0 : Mathf.Sin(Mathf.Clamp01(phase / .24f) * Mathf.PI);
                 _sdGuideMouse.rectTransform.anchoredPosition = new Vector2(next ? SDHandCenterX : SDGuideX, (next ? -211 : 25) - pull);
@@ -111,21 +121,54 @@ namespace ParvaMirabilia.Presentation
             bool practice = _sdPractice.gameObject.activeInHierarchy && !_sdPracticeRolling && _sdPracticeStep < 2;
             _sdPracticeGestureGraphic.gameObject.SetActive(practice);
             _sdPracticeGestureText.gameObject.SetActive(false);
-            if (practice && (_sdPracticeStep == 1 || SDPracticeCorrectSelection)) SDDrawGestureGuide(_sdPracticeGestureGraphic,
-                new Vector2(-345, _sdPracticeStep == 0 ? -155 : 74), _sdPracticeStep == 0);
+            if (_sdPracticeMouse != null)
+            {
+                _sdPracticeMouse.gameObject.SetActive(practice);
+                if (practice)
+                {
+                    // The mouse cue mirrors the battle tell: same press beat, same muted-to-teal
+                    // lick, and the pull drops it toward the chevrons it explains.
+                    float phase = Mathf.Repeat(_sdGuideAge, 1.8f) / 1.8f;
+                    float down = Mathf.SmoothStep(0, 1, Mathf.Clamp01((phase - .12f) / .56f));
+                    float press = _sdReducedMotion ? 0 : Mathf.Sin(Mathf.Clamp01(phase / .24f) * Mathf.PI);
+                    float pull = _sdReducedMotion ? 0 : 18 * down;
+                    _sdPracticeMouse.rectTransform.anchoredPosition = new Vector2(330, 134 - pull);
+                    _sdPracticeMouse.rectTransform.localScale = Vector3.one * (1 - press * .10f);
+                    _sdPracticeMouse.color = Color.Lerp(SDMuted, SDPositive, _sdReducedMotion ? 1 : .4f + .6f * press);
+                }
+            }
+            // Step 0 chooses the dice to keep, so its marks belong on the dice row: mismatched
+            // dice get an arrow, and the settled pair is reaffirmed with a ring plus the reroll
+            // cue beside it. Step 1 borrows the battle layout's right-hand anchor so the down-drag
+            // chevrons land beside the row exactly as they do during a match.
+            if (practice && _sdPracticeStep == 1)
+            {
+                SDDrawGestureGuide(_sdPracticeGestureGraphic, new Vector2(330, 74), false);
+            }
             else if (practice)
             {
                 _sdPracticeGestureGraphic.Clear();
                 float pulse = _sdReducedMotion ? 0 : Mathf.Sin(_sdGuideAge * 4) * 3;
-                for (int i = 0; i < 5; i++)
+                if (SDPracticeCorrectSelection)
                 {
-                    if (_sdPracticeHeld[i] == (i < 2)) continue;
-                    Vector2 target = new Vector2((i - 2) * 120, 142 + pulse);
-                    _sdPracticeGestureGraphic.Line(target + new Vector2(-6, 4), target, 2, SDPositive);
-                    _sdPracticeGestureGraphic.Line(target, target + new Vector2(6, 4), 2, SDPositive);
-                    _sdPracticeGestureGraphic.Ring(target + new Vector2(0, 16), 5, 1.5f, SDPositive, 16);
+                    // The shared cue clears the mesh first, so the pair rings are added after it.
+                    SDDrawGestureGuide(_sdPracticeGestureGraphic, new Vector2(-402, 74), true);
+                    for (int i = 0; i < 2; i++)
+                        _sdPracticeGestureGraphic.Ring(new Vector2((i - 2) * 120, 74), 55 + pulse, 2.2f, SDPositive, 30);
+                    _sdPracticeGestureGraphic.Flush();
                 }
-                _sdPracticeGestureGraphic.Flush();
+                else
+                {
+                    for (int i = 0; i < 5; i++)
+                    {
+                        if (_sdPracticeHeld[i] == (i < 2)) continue;
+                        Vector2 target = new Vector2((i - 2) * 120, 142 + pulse);
+                        _sdPracticeGestureGraphic.Line(target + new Vector2(-6, 4), target, 2, SDPositive);
+                        _sdPracticeGestureGraphic.Line(target, target + new Vector2(6, 4), 2, SDPositive);
+                        _sdPracticeGestureGraphic.Ring(target + new Vector2(0, 16), 5, 1.5f, SDPositive, 16);
+                    }
+                    _sdPracticeGestureGraphic.Flush();
+                }
             }
         }
 
@@ -159,6 +202,8 @@ namespace ParvaMirabilia.Presentation
                 if (!_sdReducedMotion)
                     color.a *= Mathf.Min(Mathf.Clamp01(downPhase / .08f),
                         1 - Mathf.Clamp01((downPhase - .80f) / .12f));
+                // The drag chevrons stay legible at the tail of the cycle instead of vanishing.
+                color.a = Mathf.Max(.5f, color.a);
                 Vector2 ghost = origin + Vector2.down * travel;
                 for (int arrow = 0; arrow < 3; arrow++)
                 {

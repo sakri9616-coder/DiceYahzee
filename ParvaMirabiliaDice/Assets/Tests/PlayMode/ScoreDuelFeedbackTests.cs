@@ -18,6 +18,14 @@ namespace ParvaMirabilia.Quality.Tests
         private int _motion, _audio;
         private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
         private ScoreDuel Engine => Read<ScoreDuel>("_sdEngine");
+        private static Color GoldRing
+        {
+            get
+            {
+                var factory = typeof(GameFlow).Assembly.GetType("ParvaMirabilia.Presentation.UiFactory");
+                return (Color)factory.GetField("Gold").GetValue(null);
+            }
+        }
 
         [UnitySetUp] public IEnumerator SetUp()
         {
@@ -469,18 +477,144 @@ namespace ParvaMirabilia.Quality.Tests
             yield return null;
         }
 
-        [UnityTest] public IEnumerator ChanceDeclarationNamesTheDamageSwapWhileItCanStillBeChanged()
+        [UnityTest] public IEnumerator ChanceSelectionGathersTheHandInGoldAndLeavesNoCueLine()
         {
             PressLive(ScoreHandKind.Chance);
             Assert.That(Read<ScoreHandKind>("_sdSelectedKind"), Is.EqualTo(ScoreHandKind.Chance));
-            Assert.That(Read<Text>("_sdChanceCue").text, Is.EqualTo("チャンス：被害の受け手を入れ替え"),
-                "a chance declaration has to name the swap while the role is still changeable");
+            yield return null;
+            Assert.That(Read<RectTransform>("_sdChanceGlowRoot").gameObject.activeSelf, Is.True,
+                "a chance selection must ring the hand in gold while the role is still changeable");
             ScoreHandKind plain = ScoreHandKind.Pair;
             foreach (ScoreOffer offer in Engine.Offers)
                 if (offer.IsAvailable && offer.Kind != ScoreHandKind.Chance) { plain = offer.Kind; break; }
             PressLive(plain);
+            yield return null;
             Assert.That(Read<ScoreHandKind>("_sdSelectedKind"), Is.EqualTo(plain));
-            Assert.That(Read<Text>("_sdChanceCue").text, Is.Empty, "the swap cue belongs to the chance declaration alone");
+            Assert.That(Read<RectTransform>("_sdChanceGlowRoot").gameObject.activeSelf, Is.False,
+                "the gold gathering belongs to the chance selection alone");
+            bool anyCue = false;
+            foreach (Text text in Object.FindObjectsByType<Text>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (text.name == "ChanceCue") anyCue = true;
+            Assert.That(anyCue, Is.False, "the cue text is retired; the glow and the rule card carry the reversal");
+            yield return null;
+        }
+
+        [UnityTest] public IEnumerator ScoreNumeralsReadAsStruckMetal()
+        {
+            Text mine = Read<Text>("_sdScoreNumber");
+            Text npc = Read<Text>("_sdNpcScoreNumber");
+            foreach (Text numeral in new[] { mine, npc })
+            {
+                var effects = numeral.GetComponents<BaseMeshEffect>();
+                Assert.That(effects.Length, Is.EqualTo(2), "a score numeral carries the gradient and then the dark edge");
+                Assert.That(effects[0].GetType().Name, Is.EqualTo("SdMetallicTextEffect"),
+                    "the gradient must tint the glyphs before the outline darkens its copies");
+                Assert.That(effects[1].GetType(), Is.EqualTo(typeof(Outline)));
+            }
+            Assert.That(mine.fontSize, Is.EqualTo(64), "the player's own figure is the loudest number on screen");
+            Assert.That(npc.fontSize, Is.EqualTo(50), "the enemy forecast stays the quieter figure");
+            yield return null;
+        }
+
+        [UnityTest] public IEnumerator RoleRailsPrintTheirMultiplierTag()
+        {
+            var categories = Read<Button[]>("_sdLiveCategories");
+            Assert.That(categories[(int)ScoreHandKind.Pair].transform.Find("Multiplier").GetComponent<Text>().text, Is.EqualTo("×1.5"));
+            Assert.That(categories[(int)ScoreHandKind.FullHouse].transform.Find("Multiplier").GetComponent<Text>().text, Is.EqualTo("×2.5"));
+            Assert.That(categories[(int)ScoreHandKind.Five].transform.Find("Multiplier").GetComponent<Text>().text, Is.EqualTo("150点"));
+            Assert.That(categories[(int)ScoreHandKind.Chance].transform.Find("Multiplier").GetComponent<Text>().text, Is.EqualTo("逆転"));
+            var npcRow = Root("_sdBattle").Find("NpcScorecard/NpcCategory0");
+            Assert.That(npcRow.Find("Multiplier").GetComponent<Text>().text, Is.EqualTo("×1.5"),
+                "the enemy rail prints the same multipliers beside its roles");
+            yield return null;
+        }
+
+        [UnityTest] public IEnumerator RerollPipsBreatheWhileRerollsRemain()
+        {
+            var pips = Read<Image[]>("_sdRollPips");
+            FieldInfo age = typeof(GameFlow).GetField("_sdRollPipPulseAge", Private);
+            Assert.That(pips[0].gameObject.activeSelf, Is.True);
+            Assert.That(pips[1].gameObject.activeSelf, Is.True);
+            age.SetValue(_flow, Mathf.PI / 2f / 4.2f);
+            Call("SDTickRollPipPulse", 0f);
+            float brightest = pips[0].color.a;
+            float widest = pips[0].transform.localScale.x;
+            age.SetValue(_flow, 3f * Mathf.PI / 2f / 4.2f);
+            Call("SDTickRollPipPulse", 0f);
+            float dim = pips[0].color.a;
+            Assert.That(brightest, Is.EqualTo(1f).Within(.01f), "the pulse peaks at full strength");
+            Assert.That(dim, Is.EqualTo(.92f).Within(.01f), "the pulse dips gently rather than flashing");
+            Assert.That(widest, Is.EqualTo(1.08f).Within(.01f),
+                "the same breath carries a bigger claim on the dot itself");
+            yield return null;
+        }
+
+        [UnityTest] public IEnumerator ArmedCarryRackRingsEveryDieAsKept()
+        {
+            Button save = Read<Button>("_sdSaveButton");
+            // Reduced motion settles the toggle the same frame; while it flies the sparks own
+            // the stroke, and this probe must read the settled drawing.
+            Write("_sdReducedMotion", true);
+            save.onClick.Invoke();
+            yield return null;
+            Assert.That(Read<bool>("_sdSaveArmed"), Is.True);
+            var rack = Read<RectTransform>("_sdCarryRack");
+            Assert.That(rack.gameObject.activeSelf, Is.True, "the armed hand previews on the rack");
+            for (int i = 0; i < 5; i++)
+            {
+                var ring = rack.Find("CarryDie" + i)?.Find("Ring");
+                Assert.That(ring, Is.Not.Null, "rack die " + i + " keeps its ring");
+                Assert.That(ring.GetComponent<Image>().color, Is.EqualTo(GoldRing),
+                    "the whole hand travels: every die shows the keep ring, not just the held ones");
+                // A 10-unit pad on a 19-unit die reaches past the 27-unit pitch and fuses five
+                // keeps into one band; the tiny cap must stay inside it to read per die.
+                Assert.That(((RectTransform)ring).sizeDelta.x, Is.EqualTo(25f),
+                    "rack die " + i + " wears its own cap, clear of the neighbours at 27-unit pitch");
+            }
+        }
+
+        [UnityTest] public IEnumerator AfterTheProposalSettlesItPromotesUpward()
+        {
+            Array.Copy(new[] { 3, 3, 3, 4, 4 }, Engine.PlayerDice, 5);
+            ScoreHandKind expected = ScoreHandKind.Chance;
+            int best = -1;
+            foreach (ScoreOffer offer in Engine.Offers)
+                if (offer.IsFormed && offer.IsAvailable && offer.Kind != ScoreHandKind.Chance && offer.Score > best)
+                { best = offer.Score; expected = offer.Kind; }
+            Call("SDPromoteFormedSelection");
+            Assert.That(expected, Is.Not.EqualTo(ScoreHandKind.Chance), "the fixture must contain a formed role");
+            Assert.That(Read<ScoreHandKind>("_sdSelectedKind"), Is.EqualTo(expected),
+                "the standing proposal moves to the strongest formed hand the dice now make");
+            PressLive(ScoreHandKind.Pair);
+            Call("SDPromoteFormedSelection");
+            Assert.That(Read<ScoreHandKind>("_sdSelectedKind"), Is.EqualTo(expected),
+                "a reroll that lands a stronger formed hand promotes the manual pick up to it");
+            Array.Copy(new[] { 2, 3, 4, 6, 6 }, Engine.PlayerDice, 5);
+            PressLive(ScoreHandKind.Pair);
+            Call("SDPromoteFormedSelection");
+            Assert.That(Read<ScoreHandKind>("_sdSelectedKind"), Is.EqualTo(ScoreHandKind.Pair),
+                "no stronger hand, no promotion: the pick keeps the wheel");
+            yield return null;
+        }
+
+        [UnityTest] public IEnumerator DamageBandsStayInsideThePillCaps()
+        {
+            var generate = typeof(GameFlow).GetMethod("SDBarSegmentSprite", Private | BindingFlags.Static);
+            Assert.That(generate, Is.Not.Null);
+            Sprite full = (Sprite)generate.Invoke(null, new object[] { 572f });
+            Sprite slice = (Sprite)generate.Invoke(null, new object[] { 32f });
+            Assert.That(slice, Is.Not.EqualTo(full),
+                "a narrow segment is authored at its own width, never a stretch of the full pill cap");
+            Assert.That((Sprite)generate.Invoke(null, new object[] { 34f }), Is.EqualTo(slice),
+                "segment widths quantize to one cache, so the amount of authored pills stays bounded");
+            var ghost = new GameObject("GhostProbe").AddComponent<Image>();
+            ghost.rectTransform.SetParent(Root("_sdBattle"), false);
+            var place = typeof(GameFlow).GetMethod("SDPlaceGhost", Private | BindingFlags.Static);
+            Assert.That(place, Is.Not.Null);
+            place.Invoke(null, new object[] { ghost, 100, 100, 1, true });
+            float right = ghost.rectTransform.anchoredPosition.x + ghost.rectTransform.sizeDelta.x;
+            Assert.That(right, Is.LessThanOrEqualTo(572f + .1f), "no damage band may pass the pill's rounded end");
+            Object.Destroy(ghost.gameObject);
             yield return null;
         }
 
@@ -606,12 +740,21 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(Engine.RerollsLeft, Is.EqualTo(1));
             yield return new WaitForSeconds(.8f);
             Assert.That(Read<bool>("_sdRolling"), Is.False);
-            AssertWheelSelection(ScoreHandKind.Five); // New dice, same target, refreshed points and damage.
-            Assert.That(Read<bool>("_sdSelectedManually"), Is.True);
+            // A reroll that lands a better formed hand promotes the wheel back to it; the
+            // unformed Five itself stays picked only when nothing formed beats its forecast.
+            ScoreHandKind expected = ScoreHandKind.Five;
+            int expectedScore = Engine.Forecast(ScoreHandKind.Five).Score;
+            foreach (ScoreOffer offer in Engine.Offers)
+                if (offer.IsFormed && offer.IsAvailable && offer.Score > expectedScore)
+                {
+                    expectedScore = offer.Score;
+                    expected = offer.Kind;
+                }
+            AssertWheelSelection(expected);
 
             PullToFire();
-            Assert.That(Engine.LastRound.PlayerKind, Is.EqualTo(ScoreHandKind.Five));
-            Assert.That(Engine.PlayerUsed[(int)ScoreHandKind.Five], Is.True);
+            Assert.That(Engine.LastRound.PlayerKind, Is.EqualTo(expected));
+            Assert.That(Engine.PlayerUsed[(int)expected], Is.True);
             Assert.That(Engine.Outcome, Is.Null);
             yield return new WaitForSeconds(.95f);
             TableClick();
@@ -619,7 +762,7 @@ namespace ParvaMirabilia.Quality.Tests
             yield return new WaitForSeconds(.8f);
             Assert.That(Read<bool>("_sdRolling"), Is.False);
             ScoreHandKind next = Read<ScoreHandKind>("_sdSelectedKind");
-            Assert.That(next, Is.Not.EqualTo(ScoreHandKind.Five));
+            Assert.That(next, Is.Not.EqualTo(expected));
             Assert.That(Engine.PlayerUsed[(int)next], Is.False);
             AssertWheelSelection(next);
             int score = Engine.Forecast(next).Score;
@@ -778,7 +921,7 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(mouse.GetComponent<Image>().color.a, Is.LessThan(bottomAlpha), "the guide fades at the bottom");
             Write("_sdGuideAge", 1.78f);
             Call("SDTickGestureGuides", 0f);
-            Assert.That(mouse.GetComponent<Image>().color.a, Is.EqualTo(0).Within(.01f), "the guide hides before returning home");
+            Assert.That(mouse.GetComponent<Image>().color.a, Is.EqualTo(.55f).Within(.02f), "the guide dims to its legibility floor rather than vanishing before returning home");
             Write("_sdGuideAge", 1.9f);
             Call("SDTickGestureGuides", 0f);
             Assert.That(mouse.anchoredPosition.y, Is.EqualTo(firstMouse.y).Within(.01f), "the next cycle starts at the original position");
@@ -841,7 +984,10 @@ namespace ParvaMirabilia.Quality.Tests
                     incomingProperty.SetValue(round, 0);
                     Call("SDStartAttackMotion");
                     Assert.That(Read<int>("_sdImpactTier"), Is.EqualTo(tier));
-                    Write("_sdAttackAge", .24f); Call("SDAnimateImpactPresentation");
+                    // Pin the launch punch so the mid-flight position stays above the asserted
+                    // line no matter what score the real committed hand happened to carry.
+                    Write("_sdImpactPunch", 1);
+                    Write("_sdAttackAge", .26f); Call("SDAnimateImpactPresentation");
                     Assert.That(Read<Text>("_sdImpactCounter").text, Is.Empty, "damage waits for contact");
                     Assert.That(Read<bool>("_sdImpactContact"), Is.False);
                     Assert.That(Die(2).anchoredPosition.y, Is.GreaterThan(homes[2].y + 100), "rendered dice fly toward the opponent");
@@ -881,6 +1027,89 @@ namespace ParvaMirabilia.Quality.Tests
                 incomingProperty.SetValue(round, originalIncoming);
                 Call("SDResetImpactPresentation");
             }
+            yield return null;
+        }
+
+        [UnityTest] public IEnumerator TheLaunchCocksBackThenWhipsAndTheBigScoresShakeTheTable()
+        {
+            PullToFire();
+            var round = Engine.LastRound;
+            var scoreProperty = typeof(ScoreRound).GetProperty("PlayerScore");
+            var npcScoreProperty = typeof(ScoreRound).GetProperty("NpcScore");
+            int originalScore = round.PlayerScore, originalNpcScore = round.NpcScore;
+            try
+            {
+                scoreProperty.SetValue(round, 70); npcScoreProperty.SetValue(round, 60);
+                Call("SDResetImpactPresentation");
+                Call("SDStartAttackMotion");
+                // Reading the homes here, right after the reset, so they are the standing
+                // positions - before the reset they still carry the flick's pull.
+                Vector2[] homes = DiceHomes();
+                // The wind-up punches below the origin, which a single glide curve never does.
+                Write("_sdAttackAge", .05f); Call("SDAnimateImpactPresentation");
+                Assert.That(Die(2).anchoredPosition.y, Is.LessThan(homes[2].y - 6f),
+                    "the launch rears back before it flies");
+                Assert.That(Root("_sdBattle").anchoredPosition, Is.EqualTo(Vector2.zero),
+                    "a modest clash never shakes the table");
+                // The whip keeps its crest: the two hundredths before contact still cover a
+                // third of the flight, so the strike does not decelerate into the enemy.
+                Write("_sdAttackAge", .28f); Call("SDAnimateImpactPresentation");
+                float crest = Die(2).anchoredPosition.y;
+                Write("_sdAttackAge", .299f); Call("SDAnimateImpactPresentation");
+                Assert.That(Die(2).anchoredPosition.y - crest, Is.GreaterThan(20f),
+                    "the launch arrives at speed instead of gliding to a stop");
+                // From 100 points up the table itself shakes, on the same explicit age, and
+                // decays back to the untouched origin inside the presentation window.
+                scoreProperty.SetValue(round, 150);
+                Call("SDStartAttackMotion");
+                Write("_sdAttackAge", .32f); Call("SDAnimateImpactPresentation");
+                Vector2 shaken = Root("_sdBattle").anchoredPosition;
+                Assert.That(shaken.sqrMagnitude, Is.GreaterThan(1f),
+                    "a 150-point clash shakes the table on landing");
+                Write("_sdAttackAge", .80f); Call("SDAnimateImpactPresentation");
+                Assert.That(Root("_sdBattle").anchoredPosition, Is.EqualTo(Vector2.zero),
+                    "the shake decays back to the untouched origin before the presentation ends");
+            }
+            finally
+            {
+                scoreProperty.SetValue(round, originalScore);
+                npcScoreProperty.SetValue(round, originalNpcScore);
+                Call("SDResetImpactPresentation");
+            }
+            yield return null;
+        }
+
+        [UnityTest] public IEnumerator TheTitleNamesItsBuild()
+        {
+            var version = Root("_sdTitle").Find("Version");
+            Assert.That(version, Is.Not.Null, "the title stamps its build tag");
+            var text = version.GetComponent<Text>();
+            Assert.That(text, Is.Not.Null, "the tag is a text");
+            Assert.That(text.text, Is.EqualTo("Ver.0.1"));
+            // It shares the bottom chrome row with the menu and the volume bar, inside their
+            // free span; nothing may park on top of it again.
+            Assert.That(((RectTransform)version).anchoredPosition, Is.EqualTo(new Vector2(280f, -319f)));
+            yield return null;
+        }
+
+        [UnityTest] public IEnumerator TheCentralNumeralSwellsWithTheScore()
+        {
+            var map = typeof(GameFlow).GetMethod("SDScoreFontFor", Private | BindingFlags.Static);
+            int[] scores = { 24, 70, 110, 150 }, expected = { 60, 64, 72, 80 };
+            for (int i = 0; i < scores.Length; i++)
+                Assert.That((int)map.Invoke(null, new object[] { scores[i] }), Is.EqualTo(expected[i]),
+                    scores[i] + " points size their figure at " + expected[i]);
+            // Only the committed display scales; the live preview keeps the everyday base.
+            Assert.That(Read<Text>("_sdScoreNumber").fontSize, Is.EqualTo(64),
+                "the preview numeral stays at the base size");
+            PullToFire();
+            var round = Engine.LastRound;
+            int original = round.PlayerScore;
+            typeof(ScoreRound).GetProperty("PlayerScore").SetValue(round, 150);
+            Call("SDRefresh");
+            Assert.That(Read<Text>("_sdScoreNumber").fontSize, Is.EqualTo(80),
+                "a 150-point hand fronts an 80-unit figure");
+            typeof(ScoreRound).GetProperty("PlayerScore").SetValue(round, original);
             yield return null;
         }
         private static string GraphicGeometry(Graphic graphic)
