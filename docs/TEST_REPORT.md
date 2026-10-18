@@ -1301,3 +1301,10 @@ SDImpactContactDelay = .30 は変更していない。全変更は base commit 7
 実 Relay のホスト・ゲスト 2 プロセスは `logs/network-duel-20261019-004743-873` で成功。両者終了0、63状態一致。両traceに `REMATCH_STARTED generation=1 hp=300,300` と `LOBBY_READY` があり、4:3の対戦・結果画面も確認した。
 
 更新スクリプトは `.validation/updater-fixture-v02` の仮インストールに実ZIPを適用し、実行ファイルのハッシュがビルド元と一致した。誤った SHA-256 指定は `SHA-256 mismatch` で拒否した。非公開 Release の利用者認証・起動時のライブ取得は、配布後に招待済みアカウントでの確認が必要。Unity の初回隔離実行は制限環境のローカルサービス起動時にクラッシュし、通常環境で上記のテストとビルドを完了した。
+
+## 31. 公開 Release の認証不要更新（2026-10-19）
+
+- リポジトリ公開後、未認証の GitHub API で `visibility=public`、`releases/latest=v0.2.0` を確認。公開 ZIP を未認証で取得し、44,028,264 byte と SHA-256 `fbd7dd2ee81b22d283d577f85a8efbd5537f134d5a3e7ea9ed22340e9e03f320` が Release の値と一致した。
+- `0.2.1` ではトークン入力・Windows 資格情報を使わず、起動時に公開 `releases/latest` を確認する。ダウンロード先は同じ Release の `browser_download_url` に限定し、ZIP の GitHub `digest` を引き続き必須とする。タイトルの表示は `Ver.0.2` のまま。
+- EditMode 全体158/158（`logs/validation-editmode-20261019-011006-241.xml`）、PlayMode 全体110/110（`logs/validation-playmode-20261019-011030-866.xml`）。非Development Windows ビルド `Builds/Windows-20261019-011351-119` は Succeeded / errors=0 / warnings=1 / version=0.2.1。実行版 `logs/player-v021-public/player-smoke.json` は passed=true、398チェック、errors=[]。`title.png` で起動時の「最新版です (Ver.0.2.1)」と「更新確認」を実画像確認した。
+- 旧 `v0.2.0` 配布版からの移行には `v0.2.1` を一度手動ダウンロードする必要がある。新しい Release への自動差し替えは、`v0.2.1` より新しい版が公開されてから実際の版間更新を確認する。

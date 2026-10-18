@@ -13,7 +13,6 @@ namespace ParvaMirabilia.Presentation
         private RectTransform _privateUpdateOverlay;
         private Text _privateUpdateStatus;
         private Text _privateTitleUpdateStatus;
-        private InputField _privateTokenInput;
         private Button _privateInstallButton;
         private bool _privateUpdateBusy;
         private PrivateReleaseUpdater.Asset _privateUpdateAsset;
@@ -22,7 +21,7 @@ namespace ParvaMirabilia.Presentation
         private void BuildPrivateUpdateUi()
         {
             SDButton("PrivateUpdate", _sdTitle, new Vector2(-430, -291), new Vector2(132, 38),
-                "更新設定", 15, OpenPrivateUpdate);
+                "更新確認", 15, OpenPrivateUpdate);
             _privateTitleUpdateStatus = SDText("PrivateUpdateStatus", _sdTitle,
                 "", 12, new Vector2(-427, -253), new Vector2(290, 28), SDMuted);
 
@@ -30,41 +29,25 @@ namespace ParvaMirabilia.Presentation
             UiFactory.CreateStretchPanel("Dim", _privateUpdateOverlay, new Color(0, 0, 0, .82f))
                 .raycastTarget = true;
             var panel = UiFactory.CreatePanel("Panel", _privateUpdateOverlay,
-                new Vector2(690, 330), Vector2.zero, DiceYahzeeVisuals.Panel);
+                new Vector2(690, 240), Vector2.zero, DiceYahzeeVisuals.Panel);
             panel.raycastTarget = true;
-            SDText("Heading", panel.transform, "非公開 GitHub 更新", 28,
-                new Vector2(0, 123), new Vector2(600, 44), SDPositive);
+            SDText("Heading", panel.transform, "ゲームの更新", 28,
+                new Vector2(0, 78), new Vector2(600, 44), SDPositive);
             var explanation = SDText("Explanation", panel.transform,
-                "招待された各自の GitHub トークンを入力してください。\n" +
-                "Fine-grained PAT: DiceYahzee の Contents を Read-only に設定。\n" +
-                "トークンは Windows 資格情報に保存し、更新確認にのみ使います。", 16,
-                new Vector2(0, 65), new Vector2(620, 82), SDRailInk);
+                "公開 GitHub Release の最新版を確認します。\n" +
+                "更新があれば ZIP を検証し、ゲーム終了後に差し替えます。", 16,
+                new Vector2(0, 22), new Vector2(620, 62), SDRailInk);
             explanation.horizontalOverflow = HorizontalWrapMode.Wrap;
-            var inputPanel = UiFactory.CreatePanel("TokenInput", panel.transform,
-                new Vector2(540, 42), new Vector2(0, -8), new Color32(35, 50, 55, 255));
-            inputPanel.raycastTarget = true;
-            _privateTokenInput = inputPanel.gameObject.AddComponent<InputField>();
-            _privateTokenInput.textComponent = UiFactory.CreateText("Secret", inputPanel.transform, "", 18,
-                TextAnchor.MiddleLeft, UiFactory.Text, Vector2.zero, new Vector2(510, 37));
-            _privateTokenInput.placeholder = UiFactory.CreateText("Placeholder", inputPanel.transform,
-                "GitHub fine-grained PAT", 16, TextAnchor.MiddleLeft, UiFactory.TextDim,
-                Vector2.zero, new Vector2(510, 37));
-            _privateTokenInput.contentType = InputField.ContentType.Password;
-            _privateTokenInput.characterLimit = 2048;
-            SDButton("SaveToken", panel.transform, new Vector2(-186, -60), new Vector2(160, 38),
-                "保存して確認", 16, SavePrivateUpdateToken);
-            SDButton("CheckUpdate", panel.transform, new Vector2(0, -60), new Vector2(160, 38),
+            SDButton("CheckUpdate", panel.transform, new Vector2(0, -33), new Vector2(160, 38),
                 "更新を確認", 16, () => StartCoroutine(CheckPrivateRelease()));
-            SDButton("ForgetToken", panel.transform, new Vector2(186, -60), new Vector2(160, 38),
-                "認証を削除", 16, ForgetPrivateUpdateToken);
             _privateUpdateStatus = SDText("Status", panel.transform, "", 15,
-                new Vector2(0, -106), new Vector2(610, 45), SDRailInk);
+                new Vector2(0, -76), new Vector2(610, 45), SDRailInk);
             _privateUpdateStatus.horizontalOverflow = HorizontalWrapMode.Wrap;
             _privateInstallButton = SDButton("InstallUpdate", panel.transform,
-                new Vector2(-88, -147), new Vector2(190, 40), "更新して再起動", 16,
+                new Vector2(-88, -111), new Vector2(190, 40), "更新して再起動", 16,
                 () => StartCoroutine(DownloadPrivateRelease()), true);
             _privateInstallButton.interactable = false;
-            SDButton("CloseUpdate", panel.transform, new Vector2(130, -147),
+            SDButton("CloseUpdate", panel.transform, new Vector2(130, -111),
                 new Vector2(150, 40), "閉じる", 16, ClosePrivateUpdate);
             _privateUpdateOverlay.gameObject.SetActive(false);
             SetPrivateUpdateStatus("更新確認は未実行");
@@ -72,16 +55,12 @@ namespace ParvaMirabilia.Presentation
 
         private void OpenPrivateUpdate()
         {
-            _privateTokenInput.text = "";
             _privateUpdateOverlay.gameObject.SetActive(true);
             _privateUpdateOverlay.SetAsLastSibling();
-            if (PrivateReleaseUpdater.ReadCredential() == null)
-                SetPrivateUpdateStatus("招待者用 GitHub トークンを設定してください");
         }
 
         private void ClosePrivateUpdate()
         {
-            _privateTokenInput.text = "";
             _privateUpdateOverlay.gameObject.SetActive(false);
         }
 
@@ -91,48 +70,16 @@ namespace ParvaMirabilia.Presentation
             if (_privateTitleUpdateStatus != null) _privateTitleUpdateStatus.text = message;
         }
 
-        private void SavePrivateUpdateToken()
-        {
-            if (_privateUpdateBusy) return;
-            string token = _privateTokenInput.text;
-            _privateTokenInput.text = "";
-            if (!PrivateReleaseUpdater.SaveCredential(token))
-            {
-                SetPrivateUpdateStatus("保存できません。Windows 版でトークンを確認してください");
-                return;
-            }
-            SetPrivateUpdateStatus("認証を保存しました。更新を確認しています");
-            StartCoroutine(CheckPrivateRelease());
-        }
-
-        private void ForgetPrivateUpdateToken()
-        {
-            if (_privateUpdateBusy) return;
-            PrivateReleaseUpdater.DeleteCredential();
-            _privateTokenInput.text = "";
-            _privateUpdateAsset = null;
-            _privateInstallButton.interactable = false;
-            SetPrivateUpdateStatus("この Windows ユーザーの更新認証を削除しました");
-        }
-
         private void StartPrivateUpdateCheck()
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-            if (PrivateReleaseUpdater.ReadCredential() != null)
-                StartCoroutine(CheckPrivateRelease());
-            else SetPrivateUpdateStatus("更新: 認証未設定");
+            StartCoroutine(CheckPrivateRelease());
 #endif
         }
 
         private IEnumerator CheckPrivateRelease()
         {
             if (_privateUpdateBusy) yield break;
-            string token = PrivateReleaseUpdater.ReadCredential();
-            if (string.IsNullOrEmpty(token))
-            {
-                SetPrivateUpdateStatus("招待者用 GitHub トークンを設定してください");
-                yield break;
-            }
             _privateUpdateBusy = true;
             _privateUpdateAsset = null;
             _privateInstallButton.interactable = false;
@@ -141,14 +88,12 @@ namespace ParvaMirabilia.Presentation
                               PrivateReleaseUpdater.Repository + "/releases/latest";
             using (var request = UnityWebRequest.Get(endpoint))
             {
-                ConfigureGitHubRequest(request, token, "application/vnd.github+json");
+                ConfigureGitHubRequest(request, "application/vnd.github+json");
                 yield return request.SendWebRequest();
                 if (request.result != UnityWebRequest.Result.Success)
                 {
-                    SetPrivateUpdateStatus(request.responseCode == 401 || request.responseCode == 403
-                        ? "認証できません。招待とトークンの Contents 権限を確認してください"
-                        : request.responseCode == 404
-                            ? "非公開リリースが見つかりません。招待・権限・公開状態を確認してください"
+                    SetPrivateUpdateStatus(request.responseCode == 404
+                            ? "公開リリースが見つかりません"
                             : "更新確認に失敗しました (HTTP " + request.responseCode + ")");
                 }
                 else
@@ -171,7 +116,7 @@ namespace ParvaMirabilia.Presentation
                         if (release.assets != null)
                             foreach (var candidate in release.assets)
                                 if (candidate.name == PrivateReleaseUpdater.ArchiveName) { asset = candidate; break; }
-                        if (asset == null || !PrivateReleaseUpdater.IsReleaseAssetUrl(asset.url) ||
+                        if (asset == null || !PrivateReleaseUpdater.IsReleaseAssetUrl(asset.browser_download_url, release.tag_name) ||
                             !PrivateReleaseUpdater.TrySha256(asset.digest, out _))
                         {
                             SetPrivateUpdateStatus("更新 ZIP または GitHub SHA-256 がありません");
@@ -190,12 +135,11 @@ namespace ParvaMirabilia.Presentation
             _privateUpdateBusy = false;
         }
 
-        private static void ConfigureGitHubRequest(UnityWebRequest request, string token, string accept)
+        private static void ConfigureGitHubRequest(UnityWebRequest request, string accept)
         {
-            request.redirectLimit = 0; // Never forward the private credential to an asset CDN.
+            request.redirectLimit = 0;
             request.timeout = 30;
             request.SetRequestHeader("Accept", accept);
-            request.SetRequestHeader("Authorization", "Bearer " + token);
             request.SetRequestHeader("User-Agent", "DiceYahzee-Updater");
             request.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28");
         }
@@ -208,20 +152,18 @@ namespace ParvaMirabilia.Presentation
 #else
             if (_privateUpdateBusy || _privateUpdateAsset == null ||
                 !PrivateReleaseUpdater.TrySha256(_privateUpdateAsset.digest, out string expected)) yield break;
-            string token = PrivateReleaseUpdater.ReadCredential();
-            if (string.IsNullOrEmpty(token)) { SetPrivateUpdateStatus("更新認証がありません"); yield break; }
             _privateUpdateBusy = true;
             _privateInstallButton.interactable = false;
-            string staging = Path.Combine(Application.persistentDataPath, "private-update-" + _privateAvailableVersion);
+            string staging = Path.Combine(Application.persistentDataPath, "release-update-" + _privateAvailableVersion);
             Directory.CreateDirectory(staging);
             string archive = Path.Combine(staging, "update.zip");
             if (File.Exists(archive)) File.Delete(archive);
             SetPrivateUpdateStatus("更新 ZIP をダウンロード中…");
             string redirected = null;
-            using (var request = UnityWebRequest.Get(_privateUpdateAsset.url))
+            using (var request = UnityWebRequest.Get(_privateUpdateAsset.browser_download_url))
             {
                 request.downloadHandler = new DownloadHandlerFile(archive);
-                ConfigureGitHubRequest(request, token, "application/octet-stream");
+                ConfigureGitHubRequest(request, "application/octet-stream");
                 yield return request.SendWebRequest();
                 if (request.responseCode == 302 || request.responseCode == 301 || request.responseCode == 307)
                     redirected = request.GetResponseHeader("Location");

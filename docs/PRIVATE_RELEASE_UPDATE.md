@@ -1,22 +1,19 @@
-# 招待ユーザー向け Windows 更新
+# Windows 版の GitHub 自動更新
 
 ## 配布者
 
-1. `scripts/Build-Windows.ps1` で Windows ビルドを作成する。出力 ZIP には `DiceYahzee-Update.ps1` が含まれる。
-2. private repository `sakri9616-coder/DiceYahzee` に `v<bundleVersion>`（例: `v0.2.0`）の GitHub Release を公開する。
-3. ビルド ZIP を **`DiceYahzee-win64.zip`** というアセット名で添付する。GitHub API がアセットに返す `digest: sha256:...` が更新時の必須検証値となる。
-4. 更新を受ける人をリポジトリに招待する。タグ名はゲームの `Application.version` より大きい三部の数値にする。ドラフトや prerelease は `releases/latest` の対象外。
+1. `scripts/Build-Windows.ps1` で Windows ビルドを作成する。ZIP には `DiceYahzee-Update.ps1` が含まれる。
+2. 公開リポジトリ `sakri9616-coder/DiceYahzee` に `v<bundleVersion>`（例: `v0.2.1`）の GitHub Release を公開する。
+3. ビルド ZIP を **`DiceYahzee-win64.zip`** という名前で添付する。GitHub API の `digest: sha256:...` を更新時の検証値とする。タグ名は現在の `Application.version` より大きい三部の数値にする。ドラフトと prerelease は `releases/latest` の対象外。
 
 ## 利用者
 
-1. 招待を受け入れ、Release の ZIP を一度ダウンロードして展開し、`DiceYahzee.exe` を起動する。ZIP の内容を同じフォルダーに保つ。
-2. 自分の GitHub アカウントで fine-grained personal access token を作る。対象を `sakri9616-coder/DiceYahzee` のみに限定し、**Contents: Read-only** を付ける。組織側の追加承認が必要なら完了させる。
-3. タイトル画面の「更新設定」でトークンを入力し「保存して確認」。以後は同じ Windows ユーザーで起動するたびに最新版を確認する。新しい Release があれば表示される「更新して再起動」を選ぶ。
-4. 「認証を削除」でローカルの資格情報を消せる。トークンが失効したときも再設定する。
+1. [最新 Release](https://github.com/sakri9616-coder/DiceYahzee/releases/latest) の `DiceYahzee-win64.zip` を一度ダウンロードして展開し、`DiceYahzee.exe` を起動する。ZIP の内容を同じフォルダーに保つ。GitHub アカウントやトークンは不要。
+2. 以後は Windows 版の起動時に自動で最新版を確認する。新しい Release があればタイトル画面の「更新確認」から「更新して再起動」を選ぶ。手動確認も「更新確認」からできる。
+3. 旧 `v0.2.0` の配布版には非公開リポジトリ用の認証処理が残っている。`v0.2.1` を一度手動で入れ直すと、以後は認証なしで更新できる。
 
 ## 動作と復旧
 
-- トークンは Windows 資格情報マネージャーにユーザー単位で保存され、GitHub API 以外には送らない。ログ、ZIP、設定ファイル、アップデーターのコマンドラインには含めない。GitHub の署名付きアセット URL への転送時にも認証ヘッダーを渡さない。
-- アプリは ZIP の SHA-256 を API の `digest` と照合する。外部アップデーターは終了を待って再照合し、安全な相対パスのみ展開する。差し替え対象の既存ファイルをバックアップしてから置き換え、差し替え途中の失敗時は元に戻す。
-- 更新ログと差し替え時のバックアップは、各ユーザーの Unity `Application.persistentDataPath` にある `private-update-<version>` 以下に保存される。失敗した場合は `update.log` を参照する。インストール先への書き込み権限が必要。
-- private リポジトリを閲覧できない利用者は更新できない。初回 ZIP、トークン、権限のいずれかが欠けた場合はゲームをそのまま利用できる。
+- アプリは公開 GitHub API の `releases/latest` を認証なしで読み、ZIP の SHA-256 を API の `digest` と照合する。外部アップデーターは終了後に再照合し、安全な相対パスのみ展開する。差し替え対象の既存ファイルをバックアップし、差し替え途中の失敗時は元に戻す。
+- 更新ログと差し替え時のバックアップは、各ユーザーの Unity `Application.persistentDataPath` にある `release-update-<version>` 以下に保存する。失敗した場合は `update.log` を参照する。インストール先への書き込み権限が必要。
+- GitHub に接続できない場合も現在のゲームはそのまま利用できる。

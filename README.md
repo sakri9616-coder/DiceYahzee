@@ -70,12 +70,12 @@ Unity **6000.3.25f1** で `ParvaMirabiliaDice` を開いてPlay。
 Windows実行版の2プロセス対戦は `scripts/Test-NetworkDuel.ps1 -Executable <DiceYahzee.exeの絶対パス> -Visual` で開始から勝敗まで、同スクリプトの `-Disconnect` でゲスト切断時の中断を確認できます。両方とも実際のRelay接続を使います。
 `-DisconnectHost` ではホスト切断時のゲスト中断を確認できます。`-Rematch -Visual` では両者の再戦ボタンから2対局目へ入り、両者のロビー復帰まで確認します。
 `scripts/Build-Windows.ps1` は実行フォルダーと同名のZIPを作り、`MonoBleedingEdge` の実行時ファイルを含むことを検査します。ZIPを展開したら、`DiceYahzee.exe`、`DiceYahzee_Data`、`MonoBleedingEdge`、`UnityPlayer.dll` を同じ階層に保って起動してください。
-非公開 GitHub Release から入手した Windows 版は、招待済みの各利用者がタイトル画面の「更新設定」で自分の読み取り用トークンを一度登録すると、次回以降の起動時に新しい版を確認します。更新 ZIP の検証と再起動の手順は [`docs/PRIVATE_RELEASE_UPDATE.md`](docs/PRIVATE_RELEASE_UPDATE.md) を参照してください。
+公開 GitHub Release から入手した Windows 版は、トークン不要で起動時に新しい版を確認します。更新 ZIP の検証と再起動の手順は [`docs/PRIVATE_RELEASE_UPDATE.md`](docs/PRIVATE_RELEASE_UPDATE.md) を参照してください。旧 0.2.0 配布版からは 0.2.1 を一度手動でダウンロードしてください。
 Web共有版が必要な場合は `scripts/Build-Web.ps1 -ProjectPath D:\MimoGame\.validation\ParvaMirabiliaDice` でビルドし、`Builds/Web-*.zip` を展開して `index.html` を含むフォルダー全体を静的HTTPサーバーへ配置します。
 ビルド成功や自動方針の勝率を、要求品質や人間の面白さの証明には使いません。
 
 現行仕様は `docs/GAME_DESIGN.md`、検証結果と確認範囲は `docs/TEST_REPORT.md`。
-同報告§29以前の記録は旧版の証跡です。0.2.0の検証と実行版の確認範囲は末尾に記録しています。
+同報告§29以前の記録は旧版の証跡です。0.2.xの検証と実行版の確認範囲は末尾に記録しています。
 役倍率と同時ダメージの採用は `docs/DESIGN_HISTORY.md` §12、0.8.0の敵・入力・攻撃演出は§13、0.9.0の持越と画面構成は§14、0.9.1の情報配置は§15、0.9.2の画面改修は§16に記録しています。
 KenneyのCC0 UI・Input Prompts・Game Iconsを使います。素材の作者とライセンスは `docs/ASSET_LICENSES.md`、`ThirdParty/`、ゲーム内クレジットを参照。
 AI生成画像は使用していません。以前の実行版は新ルールを含みません。
