@@ -36,6 +36,46 @@ namespace ParvaMirabilia.Presentation
             yield return null;
             SDHandleRightClick();
             yield return new WaitForSecondsRealtime(.78f);
+            // Focused step-1 practice check: only after the reroll lands and the down-drag
+            // chevrons are showing. Park the shared guide age at known seconds against the
+            // 1.8s cycle, sample the practice mouse travel/fade/reset, then restore the age
+            // and the caller's reduced-motion state so nothing leaks into later captures.
+            float savedPracticeAge = _sdGuideAge;
+            bool savedPracticeReducedMotion = _sdReducedMotion;
+            var practiceMouse = _sdPractice.Find("GestureGuide/PracticeMouseInput").GetComponent<Image>();
+            float practiceStartY;
+            _sdGuideAge = .18f; SDTickGestureGuides(0);
+            practiceStartY = practiceMouse.rectTransform.anchoredPosition.y;
+            SmokeCheck(practiceMouse.color.a > .9f, "step-1 practice mouse starts visible at its home position");
+            _sdGuideAge = 1.2f; SDTickGestureGuides(0);
+            SmokeCheck(practiceStartY - practiceMouse.rectTransform.anchoredPosition.y > 20f,
+                "step-1 practice mouse fully travels downward");
+            SmokeCheck(practiceMouse.color.a > .9f, "step-1 practice mouse is still visible at completed travel");
+            float practiceBottomY = practiceMouse.rectTransform.anchoredPosition.y;
+            _sdGuideAge = 1.4f; SDTickGestureGuides(0);
+            float practiceFade = practiceMouse.color.a;
+            SmokeCheck(practiceFade > 0f && practiceFade < .9f, "step-1 practice mouse partially fades after travel");
+            SmokeCheck(Mathf.Abs(practiceMouse.rectTransform.anchoredPosition.y - practiceBottomY) < .01f,
+                "step-1 practice mouse stays at the bottom while fading");
+            _sdGuideAge = 1.65f; SDTickGestureGuides(0);
+            SmokeCheck(practiceMouse.color.a == 0f, "step-1 practice mouse is fully hidden before reset");
+            _sdGuideAge = 1.8f; SDTickGestureGuides(0);
+            SmokeCheck(Mathf.Abs(practiceMouse.rectTransform.anchoredPosition.y - practiceStartY) < .01f && practiceMouse.color.a == 0f,
+                "step-1 practice mouse resets invisibly at the cycle boundary");
+            _sdGuideAge = 1.98f; SDTickGestureGuides(0);
+            SmokeCheck(practiceMouse.color.a > .9f, "step-1 practice mouse reappears in the next cycle");
+            // Reduced motion: sample twice to prove the practice mouse holds still and legible.
+            _sdReducedMotion = true;
+            _sdGuideAge = .30f; SDTickGestureGuides(0);
+            float reducedY = practiceMouse.rectTransform.anchoredPosition.y;
+            float reducedA = practiceMouse.color.a;
+            _sdGuideAge = 1.20f; SDTickGestureGuides(0);
+            SmokeCheck(Mathf.Abs(practiceMouse.rectTransform.anchoredPosition.y - reducedY) < .01f &&
+                Mathf.Abs(practiceMouse.color.a - reducedA) < .01f && practiceMouse.color.a > .9f,
+                "reduced-motion step-1 practice mouse stays static and legible across the cycle");
+            _sdReducedMotion = savedPracticeReducedMotion;
+            _sdGuideAge = savedPracticeAge;
+            SDTickGestureGuides(0);
             SmokeCheck(_sdPracticeFeedback.text.Contains(ScoreRules.Evaluate(ScoreHandKind.Three, new[] { 1, 1, 1, 5, 6 }).Score.ToString()), "fixed practice displays the independently evaluated triple score");
             SmokeCapture("practice-formed");
             SDSmokeFlick(0, 120, true);
@@ -77,12 +117,15 @@ namespace ParvaMirabilia.Presentation
             SDHandleWheel(1f);
             SmokeCheck(_sdSelectedKind == ScoreHandKind.Chance, "mouse-wheel input wraps from the first role to the final role");
             yield return null;
-            SDTickChanceGlow(.2f);
+            SDTickChanceGlow(0);
             yield return new WaitForEndOfFrame();
             SmokeCapture("chance-glow");
             SDHandleWheel(-1f);
             SmokeCheck(_sdSelectedKind == ScoreHandKind.Pair, "mouse-wheel input wraps from the final role to the first role");
             SDSelectCategory((int)originalKind);
+            // Advance the glow once on the actual selection so stale Chance halos are cleared
+            // before any later guide screenshot is read.
+            SDTickChanceGlow(0);
             SmokeCapture("battle-formed");
 
             SDResetHandEffects();
@@ -101,6 +144,63 @@ namespace ParvaMirabilia.Presentation
             SmokeCheck(fullInput, "all five actual die faces and corners receive drag input through the real GraphicRaycaster");
             SmokeCheck(_sdBattle.Find("Reroll") == null && _sdBattle.Find("Commit") == null,
                 "reroll and use-result buttons are removed from the production battle");
+            // Deterministic guide captures. Park _sdSmokeGuideAgeOverride at each target age
+            // so the ordinary Update ticker on the next frames keeps the frozen age; draw one
+            // synchronous tick to assert, then yield real render boundaries before the capture
+            // so the freshly changed geometry/opacity is actually what the camera reads.
+            float savedGuideAge = _sdGuideAge;
+            float? savedGuideOverride = _sdSmokeGuideAgeOverride;
+            var guideMouse = _sdBattle.Find("GestureGuide/MouseInput").GetComponent<Image>();
+            const float cycle = 1.8f;
+            float startY;
+            try
+            {
+                _sdSmokeGuideAgeOverride = .18f; // phase .10: fully visible at the home position
+                SDTickGestureGuides(0);
+                startY = guideMouse.rectTransform.anchoredPosition.y;
+                yield return null; yield return new WaitForEndOfFrame();
+                SmokeCheck(guideMouse.color.a > .95f, "gesture guide starts fully visible at its home position");
+                SmokeCapture("gesture-guide-start-visible");
+                _sdSmokeGuideAgeOverride = 1.2f; // phase .667: down travel complete, still nearly/full visible
+                SDTickGestureGuides(0);
+                yield return null; yield return new WaitForEndOfFrame();
+                SmokeCheck(startY - guideMouse.rectTransform.anchoredPosition.y > 20f, "gesture mouse travels downward");
+                SmokeCheck(guideMouse.color.a > .9f, "gesture mouse is still visible at completed travel");
+                float guideBottomY = guideMouse.rectTransform.anchoredPosition.y;
+                SmokeCapture("gesture-guide-downward-travel");
+                _sdSmokeGuideAgeOverride = 1.4f; // phase .778: partial fade after completed travel
+                SDTickGestureGuides(0);
+                yield return null; yield return new WaitForEndOfFrame();
+                float fadeAlpha = guideMouse.color.a;
+                SmokeCheck(fadeAlpha > 0f && fadeAlpha < .9f, "gesture mouse partially fades after completed travel");
+                SmokeCheck(Mathf.Abs(guideMouse.rectTransform.anchoredPosition.y - guideBottomY) < .01f,
+                    "the mouse stays at the travelled position while fading");
+                SmokeCapture("gesture-guide-fading");
+                _sdSmokeGuideAgeOverride = 1.65f; // phase .917: fully hidden before reset
+                SDTickGestureGuides(0);
+                yield return null; yield return new WaitForEndOfFrame();
+                SmokeCheck(guideMouse.color.a == 0f, "gesture mouse is fully hidden before the cycle reset");
+                SmokeCapture("gesture-guide-fading-hidden");
+                _sdSmokeGuideAgeOverride = cycle; // boundary: position snapped back, still invisible
+                SDTickGestureGuides(0);
+                yield return null; yield return new WaitForEndOfFrame();
+                SmokeCheck(Mathf.Abs(guideMouse.rectTransform.anchoredPosition.y - startY) < .01f,
+                    "gesture resets its position at the cycle boundary");
+                SmokeCheck(guideMouse.color.a == 0f, "reset position is invisible");
+                SmokeCapture("gesture-guide-invisible-reset");
+                _sdSmokeGuideAgeOverride = cycle + .18f; // next cycle phase .10: visible again near home
+                SDTickGestureGuides(0);
+                yield return null; yield return new WaitForEndOfFrame();
+                SmokeCheck(guideMouse.color.a > .95f, "the next cycle reappears at full opacity");
+                SmokeCheck(startY - guideMouse.rectTransform.anchoredPosition.y < 5f, "the next cycle restarts near its home position");
+                SmokeCapture("gesture-guide-next-visible-cycle");
+            }
+            finally
+            {
+                _sdGuideAge = savedGuideAge;
+                _sdSmokeGuideAgeOverride = savedGuideOverride;
+                SDTickGestureGuides(0);
+            }
             SDTickGestureGuides(.2f); SmokeCapture("gesture-down-guide-a");
             SDTickGestureGuides(.6f); SmokeCapture("gesture-down-guide-b");
             var pullStart = RectTransformUtility.WorldToScreenPoint(null, _sdBattle.TransformPoint(new Vector2(-335, -150)));

@@ -235,18 +235,20 @@ namespace ParvaMirabilia.Presentation
             RectTransform[] dice, float age)
         {
             graphic.Clear();
-            Color inner = new Color(.97f, .16f, .21f, .13f);
-            Color middle = new Color(1f, .11f, .18f, .085f);
-            Color outer = new Color(1f, .08f, .14f, .045f);
+            // Roughly twice the prior apparent brightness: thicker rings and stronger alpha,
+            // but still soft glowing halos rather than solid disks.
+            Color inner = new Color(.97f, .16f, .21f, .28f);
+            Color middle = new Color(1f, .11f, .18f, .18f);
+            Color outer = new Color(1f, .08f, .14f, .10f);
             for (int i = 0; i < 5; i++)
             {
                 if (dice[i] == null) continue;
                 Vector2 center = root.InverseTransformPoint(dice[i].TransformPoint(Vector3.zero));
                 float radius = dice[i].rect.width * .5f + 6f;
                 float breathe = _sdReducedMotion ? 0 : Mathf.Sin(age * 2.3f + i * .8f) * 1.5f;
-                graphic.Ring(center, radius + breathe, 6, inner, 24);
-                graphic.Ring(center, radius + 7 + breathe, 8, middle, 24);
-                graphic.Ring(center, radius + 15 + breathe, 10, outer, 24);
+                graphic.Ring(center, radius + breathe, 9, inner, 24);
+                graphic.Ring(center, radius + 7 + breathe, 11, middle, 24);
+                graphic.Ring(center, radius + 15 + breathe, 14, outer, 24);
                 if (_sdReducedMotion) continue;
                 for (int p = 0; p < 4; p++)
                 {
@@ -254,8 +256,8 @@ namespace ParvaMirabilia.Presentation
                     float angle = i * 1.4f + p * 1.57f + phase * .42f;
                     Vector2 radial = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
                     Vector2 at = center + radial * (radius + 5 + phase * 14);
-                    Color particle = new Color(1, .23f, .28f, Mathf.Sin(phase * Mathf.PI) * .27f);
-                    graphic.Line(at, at + radial * 1.3f, 2.5f + (1 - phase) * 2f, particle);
+                    Color particle = new Color(1, .23f, .28f, Mathf.Sin(phase * Mathf.PI) * .54f);
+                    graphic.Line(at, at + radial * 2f, 3.5f + (1 - phase) * 2f, particle);
                 }
             }
             graphic.Flush();

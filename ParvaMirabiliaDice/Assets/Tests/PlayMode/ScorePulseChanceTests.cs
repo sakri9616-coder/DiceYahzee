@@ -62,7 +62,7 @@ namespace ParvaMirabilia.Quality.Tests
             yield return null;
         }
 
-        [UnityTest] public IEnumerator ChanceSelectionDrawsFaintRedParticlesAroundTheFiveDice_ThenCleansUp()
+        [UnityTest] public IEnumerator ChanceSelectionDrawsStrongerRedParticlesAroundTheFiveDice_ThenCleansUp()
         {
             Call("SDStartMatch");
             yield return new WaitForSeconds(.95f);
@@ -76,13 +76,25 @@ namespace ParvaMirabilia.Quality.Tests
             var countField = graphic.GetType().GetField("_count", Private);
             Assert.That((int)countField.GetValue(graphic), Is.EqualTo(380), "five individual halos and their bounded particles");
             var strokes = (System.Array)graphic.GetType().GetField("_strokes", Private).GetValue(graphic);
-            var first = strokes.GetValue(0);
-            Color32 tint = (Color32)first.GetType().GetField("Color", BindingFlags.Instance | BindingFlags.Public).GetValue(first);
-            Assert.That((int)tint.r, Is.GreaterThan((int)tint.g * 3));
-            Assert.That((int)tint.a, Is.LessThan(80), "the red glow stays faint");
+            // Each die contributes 24-segment rings at starts 0/24/48 (inner/middle/outer),
+            // then 4 one-stroke particles. Read each ring's representative stroke alpha and
+            // confirm a soft-red halo with outward falloff, not a solid disk.
+            Color32 At(int s)
+            {
+                var stroke = strokes.GetValue(s);
+                return (Color32)stroke.GetType().GetField("Color", BindingFlags.Instance | BindingFlags.Public).GetValue(stroke);
+            }
+            Color32 inner = At(0), middle = At(24), outer = At(48);
+            Assert.That(inner.r, Is.GreaterThan(inner.g * 3), "the halo is red, not gold/green");
+            Assert.That(inner.a / 255f, Is.GreaterThan(.25f), "the inner red halo is clearly visible rather than faint");
+            Assert.That(inner.a / 255f, Is.LessThan(.6f), "the glow stays a soft halo, not a solid red disk");
+            Assert.That(inner.a, Is.GreaterThan(middle.a), "middle ring is behind the inner for falloff");
+            Assert.That(middle.a, Is.GreaterThan(outer.a), "outer ring is the faintest of the three");
+            Assert.That(inner.a, Is.GreaterThan(outer.a * 2), "the stronger glow spans all three rings with real falloff");
             Read<Button[]>("_sdLiveCategories")[(int)ScoreHandKind.Pair].onClick.Invoke();
             Call("SDTickChanceGlow", .1f);
             Assert.That(root.gameObject.activeSelf, Is.False);
+            Assert.That((int)countField.GetValue(graphic), Is.Zero, "cleanup clears the glow mesh");
         }
     }
 }

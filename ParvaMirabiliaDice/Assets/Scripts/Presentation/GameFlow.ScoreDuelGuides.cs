@@ -14,6 +14,9 @@ namespace ParvaMirabilia.Presentation
         private Sprite _sdMouseLeft, _sdMouseRight;
         private const float SDGuideX = 350;
         private float _sdGuideAge;
+        // Smoke-only deterministic age pin. Null in ordinary play; when set, SDTickGestureGuides
+        // takes this exact age instead of advancing, so per-frame captures are reproducible.
+        private float? _sdSmokeGuideAgeOverride;
         private bool _sdPracticeDragging;
         private Vector2 _sdPracticeDragStart;
         private readonly Vector2[] _sdPracticeHomes = new Vector2[5];
@@ -81,18 +84,21 @@ namespace ParvaMirabilia.Presentation
             _sdInstruction.gameObject.SetActive(false);
         }
 
-        // The mouse returns to its starting point before the next beat; keeping the
-        // return inside the cycle avoids a visible teleport at the loop boundary.
+        // Move only downward. Both cues disappear before their position resets at the
+        // cycle boundary, then fade in together at the original position.
         private static float SDGuidePull(float phase)
         {
-            float down = Mathf.SmoothStep(0, 1, Mathf.Clamp01((phase - .12f) / .40f));
-            float back = Mathf.SmoothStep(0, 1, Mathf.Clamp01((phase - .64f) / .28f));
-            return down * (1 - back);
+            return Mathf.SmoothStep(0, 1, Mathf.Clamp01((phase - .12f) / .50f));
         }
+
+        private static float SDGuideOpacity(float phase) =>
+            Mathf.SmoothStep(0, 1, Mathf.Clamp01(phase / .10f)) *
+            (1 - Mathf.SmoothStep(0, 1, Mathf.Clamp01((phase - .66f) / .20f)));
 
         private void SDTickGestureGuides(float dt)
         {
-            _sdGuideAge += dt;
+            if (_sdSmokeGuideAgeOverride.HasValue) _sdGuideAge = _sdSmokeGuideAgeOverride.Value;
+            else _sdGuideAge += dt;
             bool next = SDCanAdvanceTable;
             // The guide rides every planning frame: big wrapped hand effects no longer clear it,
             // because a hidden tell reads as a missing guide.
@@ -105,11 +111,12 @@ namespace ParvaMirabilia.Presentation
                 bool reroll = held == 3 && _sdEngine.RerollsLeft > 0 && !_sdDragAiming;
                 _sdGuideMouse.sprite = reroll ? _sdMouseRight : _sdMouseLeft;
                 float phase = Mathf.Repeat(_sdGuideAge, 1.8f) / 1.8f;
-                float pull = _sdReducedMotion || reroll || next ? 0 : 18 * SDGuidePull(phase);
+                float pull = _sdReducedMotion || reroll || next ? 0 : 42 * SDGuidePull(phase);
                 float press = _sdReducedMotion ? 0 : Mathf.Sin(Mathf.Clamp01(phase / .24f) * Mathf.PI);
                 _sdGuideMouse.rectTransform.anchoredPosition = new Vector2(next ? SDHandCenterX : SDGuideX, (next ? -211 : 25) - pull);
                 _sdGuideMouse.rectTransform.localScale = Vector3.one * (1 - press * .10f);
                 Color mouseColor = Color.Lerp(SDMuted, SDPositive, _sdReducedMotion ? 1 : .4f + .6f * press);
+                if (!_sdReducedMotion && !reroll && !next) mouseColor.a *= SDGuideOpacity(phase);
                 _sdGuideMouse.color = mouseColor;
                 if (next)
                 {
@@ -133,10 +140,12 @@ namespace ParvaMirabilia.Presentation
                     // lick, and the pull drops it toward the chevrons it explains.
                     float phase = Mathf.Repeat(_sdGuideAge, 1.8f) / 1.8f;
                     float press = _sdReducedMotion ? 0 : Mathf.Sin(Mathf.Clamp01(phase / .24f) * Mathf.PI);
-                    float pull = _sdReducedMotion ? 0 : 18 * SDGuidePull(phase);
+                    float pull = _sdReducedMotion ? 0 : 42 * SDGuidePull(phase);
                     _sdPracticeMouse.rectTransform.anchoredPosition = new Vector2(330, 134 - pull);
                     _sdPracticeMouse.rectTransform.localScale = Vector3.one * (1 - press * .10f);
-                    _sdPracticeMouse.color = Color.Lerp(SDMuted, SDPositive, _sdReducedMotion ? 1 : .4f + .6f * press);
+                    Color mouseColor = Color.Lerp(SDMuted, SDPositive, _sdReducedMotion ? 1 : .4f + .6f * press);
+                    if (!_sdReducedMotion) mouseColor.a *= SDGuideOpacity(phase);
+                    _sdPracticeMouse.color = mouseColor;
                 }
             }
             // Step 0 chooses the dice to keep, so its marks belong on the dice row: mismatched
@@ -200,7 +209,7 @@ namespace ParvaMirabilia.Presentation
             {
                 float downPhase = Mathf.Repeat(_sdGuideAge, 1.8f) / 1.8f;
                 float travel = _sdReducedMotion ? 16 : 42 * SDGuidePull(downPhase);
-                color.a = Mathf.Max(.5f, color.a);
+                color.a = _sdReducedMotion ? .7f : SDGuideOpacity(downPhase);
                 Vector2 ghost = origin + Vector2.down * travel;
                 for (int arrow = 0; arrow < 3; arrow++)
                 {

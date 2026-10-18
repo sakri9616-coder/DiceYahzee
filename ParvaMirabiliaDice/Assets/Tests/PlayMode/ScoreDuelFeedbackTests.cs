@@ -908,21 +908,34 @@ namespace ParvaMirabilia.Quality.Tests
             var mouse = battle.Find("GestureGuide/MouseInput").GetComponent<RectTransform>();
             Assert.That(mouse.anchoredPosition.x, Is.GreaterThan(0), "the gesture guide stays beside the player role card");
             Vector2 firstMouse = mouse.anchoredPosition;
+            GuideInk(guide, out Vector3 firstArrow);
             Call("SDTickGestureGuides", .6f);
             Assert.That(GraphicGeometry(guide), Is.Not.EqualTo(first), "down chevrons change actual generated vertices or colors");
             Assert.That(mouse.anchoredPosition, Is.Not.EqualTo(firstMouse), "the mouse illustration travels with the pull guide");
-            Write("_sdGuideAge", 1.35f);
+            GuideInk(guide, out Vector3 movedArrow);
+            Assert.That(mouse.anchoredPosition.y - firstMouse.y, Is.EqualTo(movedArrow.y - firstArrow.y).Within(.01f),
+                "mouse and arrows move downward together at the same speed");
+            Write("_sdGuideAge", 1.2f);
             Call("SDTickGestureGuides", 0f);
             Vector2 bottomMouse = mouse.anchoredPosition;
-            Write("_sdGuideAge", 1.62f);
+            float visibleAlpha = mouse.GetComponent<Image>().color.a;
+            Write("_sdGuideAge", 1.4f);
             Call("SDTickGestureGuides", 0f);
-            Assert.That(mouse.anchoredPosition.y, Is.GreaterThan(bottomMouse.y), "the mouse glides back before the loop boundary");
-            Write("_sdGuideAge", 1.78f);
+            Assert.That(mouse.anchoredPosition.y, Is.EqualTo(bottomMouse.y).Within(.01f), "the mouse never travels upward while visible");
+            Assert.That(mouse.GetComponent<Image>().color.a, Is.LessThan(visibleAlpha), "mouse fades after its downward travel");
+            Assert.That(GuideInk(guide, out _), Is.LessThan(visibleAlpha), "arrows fade with the mouse");
+            Write("_sdGuideAge", 1.65f);
             Call("SDTickGestureGuides", 0f);
-            Assert.That(mouse.anchoredPosition.y, Is.EqualTo(firstMouse.y).Within(.01f), "the return reaches home before the next cycle");
-            Write("_sdGuideAge", 1.9f);
+            Assert.That(mouse.GetComponent<Image>().color.a, Is.Zero, "mouse completely disappears before resetting");
+            Assert.That(GuideInk(guide, out _), Is.Zero, "arrows completely disappear before resetting");
+            Write("_sdGuideAge", 1.8f);
             Call("SDTickGestureGuides", 0f);
-            Assert.That(mouse.anchoredPosition.y, Is.EqualTo(firstMouse.y).Within(.01f), "the next cycle starts at the original position");
+            Assert.That(mouse.anchoredPosition.y, Is.EqualTo(25f).Within(.01f), "reset occurs at the original position");
+            Assert.That(mouse.GetComponent<Image>().color.a, Is.Zero, "reset remains invisible");
+            Assert.That(GuideInk(guide, out _), Is.Zero, "arrows remain invisible at reset");
+            Call("SDTickGestureGuides", .2f);
+            Assert.That(mouse.anchoredPosition.y, Is.EqualTo(firstMouse.y).Within(.01f), "the next cycle repeats the same start");
+            Assert.That(mouse.GetComponent<Image>().color.a, Is.GreaterThan(.9f), "mouse reappears for the next cycle");
             Assert.That(guide.raycastTarget, Is.False);
             Engine.SetHeld(new[] { true, true, true, false, false });
             Call("SDRefresh");
@@ -1110,6 +1123,25 @@ namespace ParvaMirabilia.Quality.Tests
             typeof(ScoreRound).GetProperty("PlayerScore").SetValue(round, original);
             yield return null;
         }
+        private static float GuideInk(Graphic graphic, out Vector3 firstVertex)
+        {
+            using (var helper = new VertexHelper())
+            {
+                graphic.GetType().GetMethod("OnPopulateMesh", Private, null,
+                    new[] { typeof(VertexHelper) }, null).Invoke(graphic, new object[] { helper });
+                firstVertex = Vector3.zero;
+                float alpha = 0;
+                var vertex = UIVertex.simpleVert;
+                for (int i = 0; i < helper.currentVertCount; i++)
+                {
+                    helper.PopulateUIVertex(ref vertex, i);
+                    if (i == 0) firstVertex = vertex.position;
+                    alpha = Mathf.Max(alpha, vertex.color.a / 255f);
+                }
+                return alpha;
+            }
+        }
+
         private static string GraphicGeometry(Graphic graphic)
         {
             using (var helper = new VertexHelper())

@@ -1308,3 +1308,13 @@ SDImpactContactDelay = .30 は変更していない。全変更は base commit 7
 - `0.2.1` ではトークン入力・Windows 資格情報を使わず、起動時に公開 `releases/latest` を確認する。ダウンロード先は同じ Release の `browser_download_url` に限定し、ZIP の GitHub `digest` を引き続き必須とする。タイトルの表示は `Ver.0.2` のまま。
 - EditMode 全体158/158（`logs/validation-editmode-20261019-011006-241.xml`）、PlayMode 全体110/110（`logs/validation-playmode-20261019-011030-866.xml`）。非Development Windows ビルド `Builds/Windows-20261019-011351-119` は Succeeded / errors=0 / warnings=1 / version=0.2.1。実行版 `logs/player-v021-public/player-smoke.json` は passed=true、398チェック、errors=[]。`title.png` で起動時の「最新版です (Ver.0.2.1)」と「更新確認」を実画像確認した。
 - 旧 `v0.2.0` 配布版からの移行には `v0.2.1` を一度手動ダウンロードする必要がある。新しい Release への自動差し替えは、`v0.2.1` より新しい版が公開されてから実際の版間更新を確認する。
+
+## 32. 操作ガイドの消失ループ修正と Chance 発光強化（2026-10-19）
+
+- マウスと下向き矢印が同じ42pxを下へ移動し、両方が完全に消えた後、不可視のまま初期位置へ戻って再生する。見えている間に上へ戻す計算と、矢印の透明度を50%以上に固定する処理を除去した。シングル・オンラインの共有ガイドと練習の下引き表示に適用し、控えめ設定は静止表示を維持する。
+- Chance の各ダイスの赤い輪郭と粒子の透明度を約2倍にし、輪郭・粒子を太くした。内側から外側へ薄くなる構成、ダイス背面の描画、入力を妨げない構成、選択解除時の消去、オンラインとの共通描画を維持した。
+- ユーザー指定に従い、以降の追加実装は API の `deepseek-v4.1-flash-1017` に委任した。レビューで見つけたリング参照・秒と位相の混同・キャプチャ同期の不備を差し戻し、修正版のみ適用した。作業途中で存在していたガイド初期修正も DeepSeek がレビューした。
+- 修正前の回帰テストは、マウスと矢印の移動量が一致せず失敗（`logs/validation-playmode-20261019-012516-186.xml`）。修正後の対象 PlayMode は3/3成功（最終 `logs/validation-playmode-20261019-015613-574.xml`）。生成メッシュの透明度、同じ下移動量、完全消失、不可視の位置リセット、次周期の表示、発光の強度・外側への減衰・後始末を確認した。
+- 最終 Windows 非Development ビルドは `Builds/Windows-20261019-015656-269`、Succeeded / errors=0 / warnings=1 / version=0.2.2。実プレイヤーは1024×768（`logs/player-v022-guide-chance-final-4x3`）と1280×720（`logs/player-v022-guide-chance-final-16x9`）の両方で終了0・417チェック・errors=[]。
+- 同フォルダーの `gesture-guide-start-visible.png`、`gesture-guide-downward-travel.png`、`gesture-guide-fading.png`、`gesture-guide-fading-hidden.png`、`gesture-guide-invisible-reset.png`、`gesture-guide-next-visible-cycle.png` を実画像で確認した。診断時のみ時刻を固定し、実フレームの描画更新後に各段階を撮影する。通常プレイでは固定しない。`chance-glow.png` でも赤い発光の強化と出目の可読性を確認した。練習の同じ周期と控えめ設定の静止表示も実行版チェックに含む。
+- 今回はネットワーク処理を変更しておらず、2プロセス Relay の再実行は行っていない。版間の実際の自動差し替えも今回の確認範囲には含めない。
