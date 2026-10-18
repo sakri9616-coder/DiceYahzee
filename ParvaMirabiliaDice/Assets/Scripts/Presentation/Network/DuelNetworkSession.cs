@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace ParvaMirabilia.Presentation
 {
-    public enum DuelNetworkAction { Reroll, Submit, Continue, FinishRerolls }
+    public enum DuelNetworkAction { Reroll, Submit, Continue, FinishRerolls, Rematch }
 
     [Serializable]
     public sealed class DuelNetworkCommand
@@ -21,6 +21,9 @@ namespace ParvaMirabilia.Presentation
         public int HeldMask;
         public int Kind;
         public bool Carry;
+        // Identifies which match a command belongs to, so stale rematch consents or
+        // pre-restart commands can never leak into a subsequent duel on the same session.
+        public int MatchGeneration;
     }
 
     /// <summary>Private two-player Relay session. The game owner validates all commands in VersusDuel.</summary>
@@ -167,8 +170,8 @@ namespace ParvaMirabilia.Presentation
 
         private void AcceptCommand(int player, DuelNetworkCommand command)
         {
-            if (command == null || command.Sequence <= lastSequence[player] || command.Round < 1 || command.HeldMask < 0 || command.HeldMask > 31 ||
-                (command.Action != DuelNetworkAction.Reroll && command.Action != DuelNetworkAction.Submit && command.Action != DuelNetworkAction.Continue && command.Action != DuelNetworkAction.FinishRerolls)) return;
+            if (command == null || command.Sequence <= lastSequence[player] || command.Round < 1 || command.HeldMask < 0 || command.HeldMask > 31 || command.MatchGeneration < 0 ||
+                (command.Action != DuelNetworkAction.Reroll && command.Action != DuelNetworkAction.Submit && command.Action != DuelNetworkAction.Continue && command.Action != DuelNetworkAction.FinishRerolls && command.Action != DuelNetworkAction.Rematch)) return;
             lastSequence[player] = command.Sequence;
             CommandReceived?.Invoke(player, command);
         }

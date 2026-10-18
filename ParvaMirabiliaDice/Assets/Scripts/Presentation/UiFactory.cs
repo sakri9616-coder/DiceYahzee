@@ -391,6 +391,7 @@ namespace ParvaMirabilia.Presentation
             var rect = CreateRect(name, parent, box, position);
             var text = rect.gameObject.AddComponent<Text>();
             text.font = TextFont;
+            text.fontStyle = FontStyle.Bold;
             text.text = content;
             text.fontSize = size;
             text.alignment = anchor;

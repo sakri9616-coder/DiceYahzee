@@ -11,6 +11,7 @@ namespace ParvaMirabilia.Core
         public int Hp { get; internal set; }
         public int[] Dice { get; internal set; }
         public bool[] Used { get; internal set; }
+        public int[] CategoryScores { get; internal set; }
         public int HeldMask { get; internal set; }
         public int RerollsLeft { get; internal set; }
         public long LastSequence { get; internal set; }
@@ -27,6 +28,8 @@ namespace ParvaMirabilia.Core
             var copy = (VersusPlayer)MemberwiseClone();
             copy.Dice = (int[])Dice.Clone();
             copy.Used = (bool[])Used.Clone();
+            copy.CategoryScores = (int[])CategoryScores.Clone();
+            if (!reveal && Submitted) copy.CategoryScores[(int)Kind] = 0;
             if (!reveal) { if (Submitted) copy.Used[(int)Kind] = false; if (Carry) copy.CarryUsed = false; copy.HeldMask = 0; copy.Kind = default(ScoreHandKind); copy.Score = 0; copy.Carry = false; copy.NextRerollBonus = false; }
             return copy;
         }
@@ -62,7 +65,7 @@ namespace ParvaMirabilia.Core
         {
             if (startingHp <= 0) throw new ArgumentOutOfRangeException(nameof(startingHp));
             random = new Random(seed); this.startingHp = startingHp;
-            for (int i = 0; i < 2; i++) players[i] = new VersusPlayer { Hp = startingHp, Dice = new int[5], Used = new bool[ScoreRules.HandCount] };
+            for (int i = 0; i < 2; i++) players[i] = new VersusPlayer { Hp = startingHp, Dice = new int[5], Used = new bool[ScoreRules.HandCount], CategoryScores = new int[ScoreRules.HandCount] };
         }
         /// <summary>Opponent rerolls reveal together at the role phase; submissions remain private until resolution.</summary>
         public IReadOnlyList<VersusPlayer> Snapshot(int viewer)
@@ -115,6 +118,7 @@ namespace ParvaMirabilia.Core
             var offer = ScoreRules.Evaluate(kind, p.Dice);
             p.HeldMask = heldMask; p.Kind = kind; p.Score = offer.Score;
             p.Used[(int)kind] = true; p.Carry = carry; p.CarryUsed |= carry; p.Submitted = true; p.LastSequence = sequence;
+            p.CategoryScores[(int)kind] = offer.Score;
             // Only a genuinely formed Five (five of a kind) earns the extra reroll; an unformed declaration does not.
             p.NextRerollBonus = kind == ScoreHandKind.Five && offer.IsFormed;
             if (players[0].Submitted && players[1].Submitted) Resolve();
@@ -159,7 +163,7 @@ namespace ParvaMirabilia.Core
             foreach (var p in players)
             {
                 bool all = true; foreach (bool used in p.Used) all &= used;
-                if (all) Array.Clear(p.Used, 0, p.Used.Length);
+                if (all) { Array.Clear(p.Used, 0, p.Used.Length); Array.Clear(p.CategoryScores, 0, p.CategoryScores.Length); }
                 if (!p.Carry) { p.HeldMask = 0; for (int i = 0; i < 5; i++) p.Dice[i] = random.Next(1, 7); }
                 p.Carry = false; p.Submitted = false; p.RerollsFinished = false; p.Score = 0;
                 // Refresh happens above, so a formed Five declared just before a full inventory reset still pays out and can pay again.

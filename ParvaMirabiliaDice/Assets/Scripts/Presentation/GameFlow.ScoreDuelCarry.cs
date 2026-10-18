@@ -21,9 +21,8 @@ namespace ParvaMirabilia.Presentation
             // carry button a clear ~6px gap above it instead of a 1px overlap.
             buttonRect.anchoredPosition = new Vector2(0, -230);
             buttonRect.sizeDelta = new Vector2(204, 48);
-            // The label, floppy icon and saved count are laid out once in SDBuildLiveScorecard
-            // (ScoreDuel.cs) with their optical centers measured against the rerendered glyphs;
-            // this partial only owns the button rectangle and the rack below it.
+            // The shared button factory centers its floppy icon; this partial only owns
+            // the button rectangle and the rack below it.
             _sdCarryRack = UiFactory.CreateRect("CarryRack", _sdSaveButton.transform,
                 new Vector2(160, 20), new Vector2(0, -13));
             _sdCarryRackGroup = _sdCarryRack.gameObject.AddComponent<CanvasGroup>();
@@ -85,8 +84,7 @@ namespace ParvaMirabilia.Presentation
             Color ink = _sdSaveButton.interactable ? SDPaperInk : SDMuted;
             var label = _sdSaveButton.GetComponentInChildren<Text>();
             label.color = ink;
-            label.text = _sdSaveArmed ? "持越 選択中" : "持越";
-            label.fontSize = _sdSaveArmed ? 16 : 19;
+            label.text = "";
             _sdSaveSymbol.color = ink;
             _sdSaveButton.transform.Find("SaveCount").GetComponent<Text>().color = ink;
             if (!returning && _sdCarryToggleAge < 0) SDDrawCarrySelection();
@@ -144,9 +142,7 @@ namespace ParvaMirabilia.Presentation
                     for (int i = 0; i < 5; i++)
                     {
                         var die = (RectTransform)_sdCarryRack.Find("CarryDie" + i);
-                        float phase = Time.unscaledTime * 38 + i * 1.7f;
-                        die.anchoredPosition = new Vector2((i - 2) * 27 + Mathf.Sin(phase) * 4.6f * (1 - t),
-                            Mathf.Sin(phase * .83f) * 3.0f * (1 - t));
+                        die.anchoredPosition = new Vector2((i - 2) * 27, 0) + SDChargeOffset(_sdCarryToggleAge, i, 1 - t);
                     }
                 }
             }

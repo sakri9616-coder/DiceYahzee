@@ -98,15 +98,7 @@ namespace ParvaMirabilia.Presentation
             _sdReducedMotion = PlayerPrefs.GetInt("arcane.reducedMotion", 0) != 0;
 
             _sdRoot = UiFactory.CreateStretch("ScoreDuel", _canvasRoot.transform);
-            Image background = UiFactory.CreateStretchPanel("Table", _sdRoot, new Color32(12, 21, 25, 255));
-            var grain = UiFactory.CreateStretch("Leather", background.transform).gameObject.AddComponent<RawImage>();
-            grain.texture = Resources.Load<Texture2D>("Art/Textures/leather-white");
-            grain.color = new Color(0.09f, .16f, .18f, .28f);
-            grain.uvRect = new Rect(0, 0, 2.5f, 1.5f);
-            grain.raycastTarget = false;
-            var vignette = UiFactory.CreateStretchPanel("TableLight", _sdRoot, Color.white);
-            vignette.sprite = UiFactory.VignetteSprite;
-            vignette.color = new Color(1, 1, 1, .22f);
+            SDBuildTableBackground(_sdRoot);
             _sdTitle = UiFactory.CreateStretch("SDTitle", _sdRoot);
             _sdBattle = UiFactory.CreateStretch("SDBattle", _sdRoot);
             _sdResult = UiFactory.CreateStretch("SDResult", _sdRoot);
@@ -138,6 +130,7 @@ namespace ParvaMirabilia.Presentation
             SDSelectOpponent(0);
             SDBackToTitle();
             BuildOnlineEntry();
+            BuildPrivateUpdateUi();
         }
 
         private Text SDText(string name, Transform root, string text, int size, Vector2 pos,
@@ -240,14 +233,14 @@ namespace ParvaMirabilia.Presentation
             SDButton("Rules", _sdTitle, new Vector2(86, -241), new Vector2(148, 38), "遊び方", 17, SDOpenRules);
             // The build tag shares the bottom chrome row with the menu and the volume bar,
             // parked in their free span before the bar starts.
-            SDText("Version", _sdTitle, "Ver.0.1", 14, new Vector2(280, -319),
+            SDText("Version", _sdTitle, "Ver.0.2", 14, new Vector2(280, -319),
                 new Vector2(170, 26), SDMuted, TextAnchor.MiddleRight);
             SDSelectOpponent(0);
         }
 
         private void SDBuildBattle()
         {
-            SDBuildTableMaterial();
+            SDBuildTableMaterial(_sdBattle);
             var brand = SDText("Brand", _sdBattle, "DiceYahzee", 24, new Vector2(-492, 313), new Vector2(224, 34), SDRailInk, TextAnchor.MiddleLeft);
             brand.font = Resources.Load<Font>("Fonts/AoboshiOne-Regular") ?? brand.font;
             brand.rectTransform.sizeDelta = new Vector2(224, 56);
@@ -259,18 +252,12 @@ namespace ParvaMirabilia.Presentation
             _sdNpcReveal = UiFactory.CreateRect("NpcReveal", _sdBattle, new Vector2(260, 48), new Vector2(SDHandCenterX, 180));
             for (int i = 0; i < 5; i++)
             {
-                var die = new DiceView(_sdNpcReveal, i, 44, "NpcDie" + i, new Color32(255, 249, 232, 255));
-                die.SetPosition(new Vector2((i - 2) * 51, 0)); die.SetInteractable(false); _sdNpcDice.Add(die);
-                DiceYahzeeVisuals.StyleDie(_sdNpcReveal.Find("NpcDie" + i));
+                var die = SDBuildTableDie(_sdNpcReveal, i, 44, "NpcDie" + i, new Vector2((i - 2) * 51, 0));
+                die.SetInteractable(false); _sdNpcDice.Add(die);
             }
             _sdIntentLabel = SDText("Intent", _sdBattle, "", 17, new Vector2(0, 139), new Vector2(300, 29), SDRailInk);
             _sdNpcFormula = SDText("NpcFormula", _sdBattle, "", 13, new Vector2(0, 105), new Vector2(300, 22), SDRailMuted);
-            _sdNpcScoreNumber = SDText("NpcScore", _sdBattle, "", 50, new Vector2(0, 67), new Vector2(240, 46), SDScoreGold);
-            _sdNpcScoreNumber.font = Resources.Load<Font>("Fonts/AoboshiOne-Regular") ?? _sdNpcScoreNumber.font;
-            // Noto Sans JP has a taller line box on WebGL; Truncate can discard
-            // the entire numeral even when its visible glyph fits this area.
-            _sdNpcScoreNumber.verticalOverflow = VerticalWrapMode.Overflow;
-            SDAddMetallicScore(_sdNpcScoreNumber);
+            _sdNpcScoreNumber = SDBuildScoreNumber("NpcScore", _sdBattle, new Vector2(0, 67), false);
             _sdToast = SDText("FormationToast", _sdBattle, "", 22, new Vector2(SDHandCenterX, -99), new Vector2(640, 38), SDPositive);
             var toastEdge = _sdToast.gameObject.AddComponent<Outline>();
             toastEdge.effectColor = new Color(0.04f, .09f, .10f, .95f);
@@ -278,8 +265,7 @@ namespace ParvaMirabilia.Presentation
             SDBuildLiveScorecard(); SDBuildNpcScorecard(); SDDecorateNpcRail();
             for (int i = 0; i < 5; i++)
             {
-                var die = new DiceView(_sdBattle, i, 112, "Die" + i, new Color32(255, 249, 232, 255));
-                die.SetPosition(new Vector2(SDHandCenterX + (i - 2) * 132, SDPlayerDiceY));
+                var die = SDBuildTableDie(_sdBattle, i, 112, "Die" + i, new Vector2(SDHandCenterX + (i - 2) * 132, SDPlayerDiceY));
                 die.Clicked += SDOnDieClicked; _sdDice.Add(die);
                 var pointer = _sdBattle.Find("Die" + i).gameObject.AddComponent<ScoreDuelPointer>();
                 pointer.Initialize(this, i); SDBuildDiePointerSurface(_sdBattle.Find("Die" + i));
@@ -319,43 +305,11 @@ namespace ParvaMirabilia.Presentation
             for (int i = 0; i < 9; i++)
             {
                 int captured = i;
-                var button = SDButton("LiveCategory" + i, panel.transform, new Vector2(0, 128 - i * 37), new Vector2(174, 34), "", 14, () => SDSelectCategory(captured));
-                button.GetComponent<Image>().sprite = null;
-                button.GetComponent<Shadow>().enabled = false;
-                _sdLiveCategories[i] = button;
-                // Three pinned columns: the role, its multiplier tag, then the points. The widths
-                // follow the fonts' own advances — a role name is one em per kana, and the tag and
-                // the score are measured against it — so the labels never collide however long the
-                // role's name is. Overflow keeps each single-line label off a wrap in its slot.
-                // The enemy rail adds the used check as a fourth, closing column.
-                SDText("Name", button.transform, ScoreRules.Name((ScoreHandKind)i), 16, new Vector2(-23, 0), new Vector2(116, 32), SDRailInk, TextAnchor.MiddleLeft)
-                    .horizontalOverflow = HorizontalWrapMode.Overflow;
-                SDText("Multiplier", button.transform, SDRailMultiplier((ScoreHandKind)i), 11, new Vector2(34, 0), new Vector2(34, 28), SDRailMuted, TextAnchor.MiddleRight)
-                    .horizontalOverflow = HorizontalWrapMode.Overflow;
-                _sdLiveValues[i] = SDText("Value", button.transform, "", 15, new Vector2(68, 0), new Vector2(30, 32), SDRailInk, TextAnchor.MiddleRight);
-                _sdLiveValues[i].font = Resources.Load<Font>("Fonts/AoboshiOne-Regular") ?? _sdLiveValues[i].font;
-                _sdLiveValues[i].horizontalOverflow = HorizontalWrapMode.Overflow;
-                _sdLiveMarkers[i] = UiFactory.CreatePanel("Selected", button.transform, new Vector2(3, 30), new Vector2(-84, 0), SDPositive);
-                _sdLiveMarkers[i].raycastTarget = false;
-                var rule = UiFactory.CreatePanel("RowRule", panel.transform, new Vector2(186, 1), new Vector2(0, 109 - i * 37), SDRailRule);
-                rule.raycastTarget = false;
+                _sdLiveCategories[i] = SDBuildRoleRow("LiveCategory" + i, panel.transform,
+                    new Vector2(0, 128 - i * 37), (ScoreHandKind)i, () => SDSelectCategory(captured),
+                    out _sdLiveValues[i], out _sdLiveMarkers[i]);
             }
-            _sdSaveButton = SDButton("SaveHand", _sdBattle, new Vector2(0, -232), new Vector2(190, 52), "持越", 19, SDSaveHand, true);
-            DiceYahzeeVisuals.StyleButton(_sdSaveButton, true);
-            _sdSaveButton.GetComponent<ButtonPalette>().Face = DiceYahzeeVisuals.Brass;
-            _sdSaveButton.GetComponent<ButtonPalette>().Label = SDPaperInk;
-            var saveLabel = _sdSaveButton.GetComponentInChildren<Text>();
-            // Optical vertical alignment, measured from the rendered button (device rows are the
-            // same at 1280x720): CJK glyphs settle about 2px below their box center at 19px, so
-            // the label keeps y 10 (optical center row 584) and the icon and the count land on
-            // that row rather than on their own anchor row: y 7 centers the sprite body, y 9 the
-            // numeral. Measured in the first build (icon row 580.8, label 584, count 583).
-            saveLabel.rectTransform.anchoredPosition = new Vector2(0, 10);
-            saveLabel.rectTransform.sizeDelta = new Vector2(140, 28);
-            // A floppy reads as "store this hand" where the arrow read as "continue"; the three
-            // pieces are spaced so the icon, label and count sit evenly on the 204px button.
-            _sdSaveSymbol = SDIcon("SaveSymbol", _sdSaveButton.transform, "icon-floppy", new Vector2(-82, 10), 20, SDPaperInk);
-            SDText("SaveCount", _sdSaveButton.transform, "1", 16, new Vector2(82, 9), new Vector2(22, 27), SDPaperInk);
+            _sdSaveButton = SDBuildCarryButton(_sdBattle, "SaveHand", SDSaveHand, out _sdSaveSymbol);
             _sdSaveNote = SDText("SaveCost", _sdBattle, "", 1, Vector2.zero, Vector2.zero);
             _sdSaveNote.gameObject.SetActive(false);
             SDBuildCarryPresentation();
@@ -423,17 +377,10 @@ namespace ParvaMirabilia.Presentation
 
         private void SDBuildResult()
         {
-            _sdResultTitle = SDText("Title", _sdResult, "", 48, new Vector2(0, 205), new Vector2(1000, 80), SDPositive);
-            // A draw is named exactly and set far larger than a win or a loss, so the rare
-            // simultaneous knockout reads before anything else. Its glyphs overflow this slot
-            // by design rather than being clipped away.
-            _sdResultTitle.verticalOverflow = VerticalWrapMode.Overflow;
-            _sdResultTitle.font = Resources.Load<Font>("Fonts/AoboshiOne-Regular") ?? _sdResultTitle.font;
-            SDAddScoreEdge(_sdResultTitle);
+            _sdResultTitle = SDBuildResultTitle(_sdResult);
             _sdResultDetail = SDText("Detail", _sdResult, "", 24, new Vector2(0, 78), new Vector2(1000, 150));
             SDButton("Scorecard", _sdResult, new Vector2(0, -40), new Vector2(300, 46), "記録", 19, SDOpenSheet);
-            SDButton("Rematch", _sdResult, new Vector2(0, -130), new Vector2(342, 60), "再戦", 23, SDStartMatch, true);
-            SDButton("Title", _sdResult, new Vector2(0, -213), new Vector2(300, 48), "タイトル", 19, SDBackToTitle);
+            SDBuildResultActions(_sdResult, SDStartMatch, SDBackToTitle, "Title", "タイトル", out _, out _);
         }
 
         private RectTransform SDModal(string name, string title, Vector2 size)
@@ -648,6 +595,7 @@ namespace ParvaMirabilia.Presentation
         private void SDStartMatch()
         {
             SDCloseModals();
+            SDResetSingleScorePulses();
             _sdEngine = new ScoreDuel(FreshSeed(), _sdOpponent, SDOpponentProfiles[_sdOpponentIndex].NpcHp);
             _sdEngine.Roll();
             _sdTitle.gameObject.SetActive(false);
@@ -738,19 +686,8 @@ namespace ParvaMirabilia.Presentation
         {
             // Suggest the strongest unused result until the player chooses a target. An
             // explicit choice survives rerolls; the formation notice still follows real dice.
-            bool found = false;
-            ScoreOffer best = default;
-            bool foundFormation = false;
-            ScoreOffer formation = default;
-            foreach (ScoreOffer offer in _sdEngine.Offers)
-            {
-                // Chance is a declaration, not a suggestion: the auto-pick never lands there.
-                if (offer.Kind == ScoreHandKind.Chance || !offer.IsAvailable) continue;
-                if (!found || offer.Score > best.Score) { found = true; best = offer; }
-                if (offer.Kind != ScoreHandKind.Chance && offer.IsFormed && offer.Score > 0 &&
-                    (!foundFormation || offer.Score > formation.Score))
-                { foundFormation = true; formation = offer; }
-            }
+            bool found = SDTryPreferredOffer(_sdEngine.PlayerDice, _sdEngine.PlayerUsed, false, out ScoreOffer best);
+            bool foundFormation = SDTryPreferredOffer(_sdEngine.PlayerDice, _sdEngine.PlayerUsed, true, out ScoreOffer formation);
             if (!found) return;
             if (!_sdSelectedManually) _sdSelectedKind = best.Kind;
             if (!announce || !foundFormation) return;
@@ -775,15 +712,8 @@ namespace ParvaMirabilia.Presentation
         private void SDPromoteFormedSelection()
         {
             if (_sdEngine == null) return;
-            bool found = false;
-            ScoreOffer best = default;
-            int current = 0;
-            foreach (ScoreOffer offer in _sdEngine.Offers)
-            {
-                if (offer.Kind == _sdSelectedKind) current = offer.Score;
-                if (offer.Kind == ScoreHandKind.Chance || !offer.IsFormed || !offer.IsAvailable || offer.Score <= 0) continue;
-                if (!found || offer.Score > best.Score) { found = true; best = offer; }
-            }
+            bool found = SDTryPreferredOffer(_sdEngine.PlayerDice, _sdEngine.PlayerUsed, true, out ScoreOffer best);
+            int current = ScoreRules.Evaluate(_sdSelectedKind, _sdEngine.PlayerDice).Score;
             if (!found || best.Score <= current) return;
             _sdSelectedKind = best.Kind;
             // The suggestion owns the preview again after taking the wheel back.
@@ -904,6 +834,7 @@ namespace ParvaMirabilia.Presentation
             foreach (DiceView die in _sdNpcDice) npcRolling |= die.IsRolling;
             _sdIntentLabel.text = npcRolling ? "" : ScoreRules.Name(intent.Kind);
             _sdNpcScoreNumber.text = npcRolling ? "—" : intent.Score.ToString();
+            SDObserveScorePulse(_sdNpcScoreNumber, ref _sdEnemyScorePulse, npcRolling ? -1 : intent.Score);
             _sdNpcFormula.text = npcRolling ? "" : SDCalculation(intent.Kind, SDNpcHand());
             if (!npcRolling)
             {
@@ -922,8 +853,8 @@ namespace ParvaMirabilia.Presentation
                 _sdDieLabels[i].text = "";
             }
             SDSetButtonEnabled(_sdSaveButton, !_sdRolling && !_sdCommitted && !SDModalOpen && !_sdEngine.SavedHandUsed);
-            _sdSaveButton.GetComponentInChildren<Text>().text = "持越";
-            _sdSaveButton.transform.Find("SaveCount").GetComponent<Text>().text = _sdEngine.SavedHandUsed ? "0" : "1";
+            _sdSaveButton.GetComponentInChildren<Text>().text = "";
+            _sdSaveButton.transform.Find("SaveCount").GetComponent<Text>().text = "";
             _sdSaveNote.text = ""; _sdInstruction.text = ""; _sdEffectLabel.text = "";
             SDRefreshLiveScorecard(); SDRefreshNpcScorecard(npcRolling); SDRefreshScope(); SDRefreshHud();
             _sdRoleLabel.enabled = _sdToastAge < 0;
@@ -931,6 +862,7 @@ namespace ParvaMirabilia.Presentation
             {
                 _sdRoleLabel.text = ""; _sdScoreNumber.text = "—"; _sdBreakdown.text = "";
                 _sdScoreNumber.fontSize = 64;
+                SDObserveScorePulse(_sdScoreNumber, ref _sdOwnScorePulse, -1);
                 return;
             }
             ScoreHandKind kind = _sdCommitted ? _sdEngine.LastRound.PlayerKind : _sdSelectedKind;
@@ -939,6 +871,7 @@ namespace ParvaMirabilia.Presentation
             _sdRoleLabel.text = ScoreRules.Name(kind);
             _sdScoreNumber.text = score.ToString();
             _sdScoreNumber.fontSize = _sdCommitted ? SDScoreFontFor(score) : 64;
+            SDObserveScorePulse(_sdScoreNumber, ref _sdOwnScorePulse, score);
             _sdBreakdown.text = SDCalculation(kind, dice);
         }
 
@@ -958,7 +891,6 @@ namespace ParvaMirabilia.Presentation
                 button.GetComponent<Image>().color = selected ? new Color32(193, 157, 95, 255) : new Color(1,1,1,.005f);
                 Text name = button.transform.Find("Name").GetComponent<Text>();
                 name.color = selected ? SDPaperInk : offer.IsAvailable ? SDRailInk : SDRailUsed;
-                name.fontStyle = selected ? FontStyle.Bold : FontStyle.Normal;
                 _sdLiveValues[i].text = !offer.IsAvailable ? "—" : _sdRolling ? "·" : offer.Score.ToString();
                 _sdLiveValues[i].color = selected ? SDPaperInk : offer.IsAvailable ? SDRailInk : SDRailUsed;
                 _sdLiveMarkers[i].gameObject.SetActive(selected && !_sdRolling);
@@ -970,14 +902,8 @@ namespace ParvaMirabilia.Presentation
             if (_sdEngine == null) return;
             _sdPlayerHpShown = player;
             _sdNpcHpShown = npc;
-            float playerWidth = SDHpWidth * Mathf.Clamp01(player / ScoreDuel.StartingHp);
-            float npcWidth = SDHpWidth * Mathf.Clamp01(npc / _sdEngine.NpcMaxHp);
-            _sdPlayerBar.rectTransform.sizeDelta = new Vector2(playerWidth, SDHpThickness);
-            _sdNpcBar.rectTransform.sizeDelta = new Vector2(npcWidth, SDHpThickness);
-            // The fill's cap is re-authored at its own width so it follows the pill's corner
-            // instead of poking past it while a bar drains through the rounded end.
-            _sdPlayerBar.sprite = SDBarSegmentSprite(playerWidth);
-            _sdNpcBar.sprite = SDBarSegmentSprite(npcWidth);
+            SDSetTableHp(_sdPlayerBar, player, ScoreDuel.StartingHp);
+            SDSetTableHp(_sdNpcBar, npc, _sdEngine.NpcMaxHp);
             SDApplyHpLines();
         }
 
@@ -1011,6 +937,7 @@ namespace ParvaMirabilia.Presentation
             if (SDModalOpen || _sdRolling || _sdEngine == null || _sdCommitted || index < 0 || index >= 9 || _sdEngine.PlayerUsed[index]) return;
             _sdSelectedKind = (ScoreHandKind)index;
             _sdSelectedManually = true;
+            if (_sdSelectedKind == ScoreHandKind.Chance && _sdFxActive) SDResetHandEffects();
             GameAudio.Play("die_keep");
             SDRefresh();
         }
@@ -1054,6 +981,7 @@ namespace ParvaMirabilia.Presentation
             if (npcMoving) SDRefresh();
             SDTickHandEffects(dt);
             SDTickChanceGlow(dt);
+            SDTickSingleScorePulses(dt);
             SDRefreshDieLabelsVisibility();
             SDTickAttackMotion(dt);
             SDTickCarryReturn(dt);

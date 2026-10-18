@@ -20,11 +20,13 @@ namespace ParvaMirabilia.Presentation
         private readonly Vector2[] _sdFxSparkOrigin = new Vector2[28];
         private readonly Vector2[] _sdFxSparkVelocity = new Vector2[28];
         private Image _sdFxTraceHead;
-        // The Chance glow lives with the hand effects: same stretch parent, same stroke graphic,
-        // but its own lifetime so a formation effect never leaves it behind.
+        // Chance particles have their own lifetime so formation effects cannot leave them behind.
         private RectTransform _sdChanceGlowRoot;
         private ScoreHandEffectGraphic _sdChanceGlowGeometry;
         private float _sdChanceGlowAge;
+        private RectTransform _onlineChanceGlowRoot;
+        private ScoreHandEffectGraphic _onlineChanceGlowGeometry;
+        private float _onlineChanceGlowAge;
         private ScoreHandKind _sdFxLastKind;
         private int _sdFxTier, _sdFxMask, _sdFxPathCount, _sdFxSparkCount, _sdFxScaledMask, _sdFxPositionedMask;
         private float _sdFxAge = -1, _sdFxDuration;
@@ -49,9 +51,7 @@ namespace ParvaMirabilia.Presentation
             // Geometry sits behind the faces: a traced line never obscures their pips. Its
             // travelling head and sparks show the ordered visits between the physical dice.
             _sdFxRoot.SetSiblingIndex(firstDie);
-            // A gold ring gathers the physical dice while Chance is the chosen role. It is the one
-            // role whose payoff is not its own score, so the hand it will reverse is named in place.
-            // It sits behind the faces, level with the other hand effects, and starts hidden.
+            // Chance stays behind the dice and cannot intercept a pointer gesture.
             _sdChanceGlowRoot = UiFactory.CreateStretch("ChanceGlow", _sdBattle);
             _sdChanceGlowGeometry = _sdChanceGlowRoot.gameObject.AddComponent<ScoreHandEffectGraphic>();
             _sdChanceGlowGeometry.raycastTarget = false;
@@ -186,9 +186,8 @@ namespace ParvaMirabilia.Presentation
         }
 
         /// <summary>
-        /// While Chance is the chosen role, a gold ring breathes around every physical die and
-        /// short sparks rise from the faces. The cue is drawn on the hand itself so the reversal
-        /// reads against the dice it will be applied to. Reduced motion holds a steady ring.
+        /// A bounded set of faint crimson UI particles surrounds each die while Chance is selected.
+        /// It follows the physical die transforms and pauses to a static glow in reduced motion.
         /// </summary>
         private void SDTickChanceGlow(float dt)
         {
@@ -199,30 +198,67 @@ namespace ParvaMirabilia.Presentation
                 return;
             }
             _sdChanceGlowAge += Mathf.Max(0, dt);
-            float breathe = _sdReducedMotion ? 0 : Mathf.Sin(_sdChanceGlowAge * 2.4f);
-            Color ring = SDScoreGold;
-            ring.a = _sdReducedMotion ? .8f : .78f + breathe * .14f;
-            _sdChanceGlowGeometry.Clear();
+            SDDrawChanceParticles(_sdChanceGlowRoot, _sdChanceGlowGeometry, _sdFxDice, _sdChanceGlowAge);
+            _sdChanceGlowRoot.gameObject.SetActive(true);
+        }
+
+        private void SDBuildOnlineChanceGlow()
+        {
+            if (_onlineChanceGlowRoot != null || _onlineRoot == null) return;
+            _onlineChanceGlowRoot = UiFactory.CreateStretch("OnlineChanceGlow", _onlineRoot);
+            _onlineChanceGlowGeometry = _onlineChanceGlowRoot.gameObject.AddComponent<ScoreHandEffectGraphic>();
+            _onlineChanceGlowGeometry.raycastTarget = false;
+            if (_onlineOwnDice[0] != null) _onlineChanceGlowRoot.SetSiblingIndex(_onlineOwnDice[0].GetSiblingIndex());
+            _onlineChanceGlowRoot.gameObject.SetActive(false);
+        }
+
+        private void SDTickOnlineChanceGlow(float dt)
+        {
+            if (_onlineChanceGlowRoot == null) return;
+            bool selected = _onlineState != null && !_onlineStopped && !OnlineHelpOpen &&
+                _onlineState.phase != (int)VersusPhase.Finished &&
+                _onlineState.players[OnlineMe].submitted == false && _onlineKind == (int)ScoreHandKind.Chance &&
+                OnlineCanChoose;
+            if (!selected) { SDResetOnlineChanceGlow(); return; }
+            _onlineChanceGlowAge += Mathf.Max(0, dt);
+            SDDrawChanceParticles(_onlineChanceGlowRoot, _onlineChanceGlowGeometry, _onlineOwnDice, _onlineChanceGlowAge);
+            _onlineChanceGlowRoot.gameObject.SetActive(true);
+        }
+
+        private void SDResetOnlineChanceGlow()
+        {
+            _onlineChanceGlowAge = 0;
+            if (_onlineChanceGlowRoot != null) _onlineChanceGlowRoot.gameObject.SetActive(false);
+        }
+
+        private void SDDrawChanceParticles(RectTransform root, ScoreHandEffectGraphic graphic,
+            RectTransform[] dice, float age)
+        {
+            graphic.Clear();
+            Color inner = new Color(.97f, .16f, .21f, .13f);
+            Color middle = new Color(1f, .11f, .18f, .085f);
+            Color outer = new Color(1f, .08f, .14f, .045f);
             for (int i = 0; i < 5; i++)
             {
-                if (_sdFxDice[i] == null) continue;
-                Vector2 center = _sdChanceGlowRoot.InverseTransformPoint(_sdFxDice[i].TransformPoint(Vector3.zero));
-                _sdChanceGlowGeometry.Ring(center, 66 + breathe * 4, _sdReducedMotion ? 2f : 3f, ring, 24);
-                _sdChanceGlowGeometry.Ring(center, 52, _sdReducedMotion ? 1.5f : 2f, ring, 20);
+                if (dice[i] == null) continue;
+                Vector2 center = root.InverseTransformPoint(dice[i].TransformPoint(Vector3.zero));
+                float radius = dice[i].rect.width * .5f + 6f;
+                float breathe = _sdReducedMotion ? 0 : Mathf.Sin(age * 2.3f + i * .8f) * 1.5f;
+                graphic.Ring(center, radius + breathe, 6, inner, 24);
+                graphic.Ring(center, radius + 7 + breathe, 8, middle, 24);
+                graphic.Ring(center, radius + 15 + breathe, 10, outer, 24);
                 if (_sdReducedMotion) continue;
-                for (int s = 0; s < 6; s++)
+                for (int p = 0; p < 4; p++)
                 {
-                    // Sparks start at a different point of their rise per die, so the hand does not
-                    // blink on and off as one piece. They clear the face's own top edge.
-                    float phase = Mathf.Repeat(_sdChanceGlowAge * .5f + s * .17f + i * .12f, 1f);
-                    Vector2 at = center + new Vector2((s - 2.5f) * 11f, 50 + phase * 34f);
-                    Color spark = SDScoreGold;
-                    spark.a = (1 - phase) * .9f;
-                    _sdChanceGlowGeometry.Line(at, at + new Vector2(0, 11), 2.2f, spark);
+                    float phase = Mathf.Repeat(age * (.35f + p * .035f) + i * .17f + p * .23f, 1);
+                    float angle = i * 1.4f + p * 1.57f + phase * .42f;
+                    Vector2 radial = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                    Vector2 at = center + radial * (radius + 5 + phase * 14);
+                    Color particle = new Color(1, .23f, .28f, Mathf.Sin(phase * Mathf.PI) * .27f);
+                    graphic.Line(at, at + radial * 1.3f, 2.5f + (1 - phase) * 2f, particle);
                 }
             }
-            _sdChanceGlowGeometry.Flush();
-            _sdChanceGlowRoot.gameObject.SetActive(true);
+            graphic.Flush();
         }
 
         private void SDResetChanceGlow()
@@ -392,7 +428,7 @@ namespace ParvaMirabilia.Presentation
     internal sealed class ScoreHandEffectGraphic : MaskableGraphic
     {
         private struct Stroke { public Vector2 A, B; public float Width; public Color32 Color; }
-        private readonly Stroke[] _strokes = new Stroke[220];
+        private readonly Stroke[] _strokes = new Stroke[512];
         private int _count;
         public void Clear() { _count = 0; }
         public void Flush() { SetVerticesDirty(); }

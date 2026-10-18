@@ -136,6 +136,11 @@ namespace ParvaMirabilia.Tests
             Assert.That(duel.Snapshot(1)[0].CarryUsed, Is.False);
             Assert.That(duel.Snapshot(1)[0].Used[(int)ScoreHandKind.Pair], Is.False);
             Assert.That(duel.Snapshot(0)[0].Used[(int)ScoreHandKind.Pair], Is.True);
+            Assert.That(duel.Snapshot(1)[0].CategoryScores[(int)ScoreHandKind.Pair], Is.Zero, "a category score cannot leak a pending declaration");
+            int score = duel.Snapshot(0)[0].CategoryScores[(int)ScoreHandKind.Pair];
+            Assert.That(score, Is.GreaterThan(0));
+            duel.Snapshot(0)[0].CategoryScores[(int)ScoreHandKind.Pair] = -1;
+            Assert.That(duel.Snapshot(0)[0].CategoryScores[(int)ScoreHandKind.Pair], Is.EqualTo(score), "snapshot score arrays must be detached");
         }
 
         [Test]

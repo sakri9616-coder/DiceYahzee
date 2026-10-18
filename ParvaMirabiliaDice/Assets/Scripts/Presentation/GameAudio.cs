@@ -22,7 +22,7 @@ namespace ParvaMirabilia.Presentation
 
         // Preserve the old four-step preference when upgrading existing installations.
         private static readonly float[] VolumeSteps = { 1f, 0.6f, 0.3f, 0f };
-        private const float BgmGain = 0.315f; // 30% below the former 0.45 gain.
+        private const float BgmGain = 0.189f; // 40% below the previous 0.315 maximum.
 
         /// <summary>RMS the interface sounds are lifted to; impulses stay louder by nature.</summary>
         private const float TargetRms = 0.06f;

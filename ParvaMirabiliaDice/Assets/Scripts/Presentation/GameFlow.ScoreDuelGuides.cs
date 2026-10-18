@@ -81,6 +81,15 @@ namespace ParvaMirabilia.Presentation
             _sdInstruction.gameObject.SetActive(false);
         }
 
+        // The mouse returns to its starting point before the next beat; keeping the
+        // return inside the cycle avoids a visible teleport at the loop boundary.
+        private static float SDGuidePull(float phase)
+        {
+            float down = Mathf.SmoothStep(0, 1, Mathf.Clamp01((phase - .12f) / .40f));
+            float back = Mathf.SmoothStep(0, 1, Mathf.Clamp01((phase - .64f) / .28f));
+            return down * (1 - back);
+        }
+
         private void SDTickGestureGuides(float dt)
         {
             _sdGuideAge += dt;
@@ -96,17 +105,11 @@ namespace ParvaMirabilia.Presentation
                 bool reroll = held == 3 && _sdEngine.RerollsLeft > 0 && !_sdDragAiming;
                 _sdGuideMouse.sprite = reroll ? _sdMouseRight : _sdMouseLeft;
                 float phase = Mathf.Repeat(_sdGuideAge, 1.8f) / 1.8f;
-                float down = Mathf.SmoothStep(0, 1, Mathf.Clamp01((phase - .12f) / .56f));
-                // A floor keeps the mouse on screen through the whole cycle. The pulse still
-                // reads as motion, but the icon never fades into the table between beats.
-                float visibility = _sdReducedMotion || reroll || next ? 1 :
-                    Mathf.Max(.55f, Mathf.Min(Mathf.Clamp01(phase / .08f), 1 - Mathf.Clamp01((phase - .80f) / .12f)));
-                float pull = _sdReducedMotion || reroll || next ? 0 : 18 * down;
+                float pull = _sdReducedMotion || reroll || next ? 0 : 18 * SDGuidePull(phase);
                 float press = _sdReducedMotion ? 0 : Mathf.Sin(Mathf.Clamp01(phase / .24f) * Mathf.PI);
                 _sdGuideMouse.rectTransform.anchoredPosition = new Vector2(next ? SDHandCenterX : SDGuideX, (next ? -211 : 25) - pull);
                 _sdGuideMouse.rectTransform.localScale = Vector3.one * (1 - press * .10f);
                 Color mouseColor = Color.Lerp(SDMuted, SDPositive, _sdReducedMotion ? 1 : .4f + .6f * press);
-                mouseColor.a *= visibility;
                 _sdGuideMouse.color = mouseColor;
                 if (next)
                 {
@@ -129,9 +132,8 @@ namespace ParvaMirabilia.Presentation
                     // The mouse cue mirrors the battle tell: same press beat, same muted-to-teal
                     // lick, and the pull drops it toward the chevrons it explains.
                     float phase = Mathf.Repeat(_sdGuideAge, 1.8f) / 1.8f;
-                    float down = Mathf.SmoothStep(0, 1, Mathf.Clamp01((phase - .12f) / .56f));
                     float press = _sdReducedMotion ? 0 : Mathf.Sin(Mathf.Clamp01(phase / .24f) * Mathf.PI);
-                    float pull = _sdReducedMotion ? 0 : 18 * down;
+                    float pull = _sdReducedMotion ? 0 : 18 * SDGuidePull(phase);
                     _sdPracticeMouse.rectTransform.anchoredPosition = new Vector2(330, 134 - pull);
                     _sdPracticeMouse.rectTransform.localScale = Vector3.one * (1 - press * .10f);
                     _sdPracticeMouse.color = Color.Lerp(SDMuted, SDPositive, _sdReducedMotion ? 1 : .4f + .6f * press);
@@ -197,12 +199,7 @@ namespace ParvaMirabilia.Presentation
             else
             {
                 float downPhase = Mathf.Repeat(_sdGuideAge, 1.8f) / 1.8f;
-                float travel = _sdReducedMotion ? 16 : 42 * Mathf.SmoothStep(0, 1,
-                    Mathf.Clamp01((downPhase - .12f) / .56f));
-                if (!_sdReducedMotion)
-                    color.a *= Mathf.Min(Mathf.Clamp01(downPhase / .08f),
-                        1 - Mathf.Clamp01((downPhase - .80f) / .12f));
-                // The drag chevrons stay legible at the tail of the cycle instead of vanishing.
+                float travel = _sdReducedMotion ? 16 : 42 * SDGuidePull(downPhase);
                 color.a = Mathf.Max(.5f, color.a);
                 Vector2 ghost = origin + Vector2.down * travel;
                 for (int arrow = 0; arrow < 3; arrow++)

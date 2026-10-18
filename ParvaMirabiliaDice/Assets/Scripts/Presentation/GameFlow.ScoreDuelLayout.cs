@@ -61,13 +61,13 @@ namespace ParvaMirabilia.Presentation
                 position, Vector2.one * size, color);
         }
 
-        private void SDBuildTableMaterial()
+        private void SDBuildTableMaterial(Transform root)
         {
-            var frame = UiFactory.CreatePanel("TableRim", _sdBattle, new Vector2(1200, 560), new Vector2(0, -8), SDPositive);
+            var frame = UiFactory.CreatePanel("TableRim", root, new Vector2(1200, 560), new Vector2(0, -8), SDPositive);
             frame.sprite = null;
             frame.color = Color.clear;
             frame.raycastTarget = false;
-            var mat = UiFactory.CreatePanel("TableMat", _sdBattle, new Vector2(1192, 552), new Vector2(0, -8), SDInk);
+            var mat = UiFactory.CreatePanel("TableMat", root, new Vector2(1192, 552), new Vector2(0, -8), SDInk);
             mat.sprite = null;
             mat.color = Color.clear;
             mat.raycastTarget = false;
@@ -76,7 +76,7 @@ namespace ParvaMirabilia.Presentation
             grain.uvRect = new Rect(0, 0, 2.4f, 1.5f);
             grain.color = new Color(.48f, .57f, .61f, .035f);
             grain.raycastTarget = false;
-            var line = UiFactory.CreatePanel("OpponentDivider", _sdBattle, new Vector2(680, 1), new Vector2(0, 40), SDMuted);
+            var line = UiFactory.CreatePanel("OpponentDivider", root, new Vector2(680, 1), new Vector2(0, 40), SDMuted);
             line.color = new Color(.55f, .72f, .72f, .34f);
             line.raycastTarget = false;
         }
@@ -99,13 +99,7 @@ namespace ParvaMirabilia.Presentation
                 label.fontSize = 18;
                 label.horizontalOverflow = HorizontalWrapMode.Overflow;
             }
-            _sdScoreNumber = SDText("ScoreNumber", _sdBattle.Find("CurrentRole"), "", 64, new Vector2(0, -29), new Vector2(240, 116), SDScoreGold);
-            _sdScoreNumber.font = Resources.Load<Font>("Fonts/AoboshiOne-Regular") ?? _sdScoreNumber.font;
-            _sdScoreNumber.verticalOverflow = VerticalWrapMode.Overflow;
-            _sdScoreNumber.raycastTarget = false;
-            // A heavier dark edge than the NPC figure's keeps the player's own number the loudest
-            // object on the table.
-            SDAddMetallicScore(_sdScoreNumber, 3.2f);
+            _sdScoreNumber = SDBuildScoreNumber("ScoreNumber", _sdBattle.Find("CurrentRole"), new Vector2(0, -29), true);
             for (int i = 0; i < 3; i++)
             {
                 _sdRollPips[i] = UiFactory.CreatePanel("RollPip" + i, _sdBattle, Vector2.one * 14,
@@ -199,7 +193,11 @@ namespace ParvaMirabilia.Presentation
         {
             ScoreOffer offer = ScoreRules.Evaluate(kind, dice);
             if (kind == ScoreHandKind.Five && offer.IsFormed) return "150";
-            return offer.BaseScore + " " + SDMultiplier(kind, offer.IsFormed);
+            // Chance has no summed contribution beyond the faces; still spell out the base 20
+            // so the ``20 + sum`` shape stays unambiguous across every role.
+            int sum = offer.BaseScore - ScoreRules.BasePoints;
+            string product = SDMultiplier(kind, offer.IsFormed);
+            return "(" + ScoreRules.BasePoints + " + " + sum + ") " + product;
         }
 
         private void SDRefreshHud()

@@ -77,6 +77,9 @@ namespace ParvaMirabilia.Presentation
             SDHandleWheel(1f);
             SmokeCheck(_sdSelectedKind == ScoreHandKind.Chance, "mouse-wheel input wraps from the first role to the final role");
             yield return null;
+            SDTickChanceGlow(.2f);
+            yield return new WaitForEndOfFrame();
+            SmokeCapture("chance-glow");
             SDHandleWheel(-1f);
             SmokeCheck(_sdSelectedKind == ScoreHandKind.Pair, "mouse-wheel input wraps from the final role to the first role");
             SDSelectCategory((int)originalKind);
@@ -389,7 +392,7 @@ namespace ParvaMirabilia.Presentation
                 "round " + _sdEngine.Round + " preserves the actual dice and fixed NPC intent");
             var offer = ScoreRules.Evaluate(_sdSelectedKind, proof.PlayerDice);
             float factor = offer.IsFormed ? ScoreRules.MultiplierQuarters(_sdSelectedKind) / 4f : 1f;
-            string formula = offer.BaseScore + " ×" + factor.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+            string formula = "(20 + " + (offer.BaseScore - 20) + ") ×" + factor.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
             var forecast = proof.Forecast(_sdSelectedKind);
             SmokeCheck(_sdScoreNumber.text == offer.Score.ToString() && _sdBreakdown.text == formula &&
                 _sdNpcScoreNumber.text == proof.Intent.Score.ToString() &&

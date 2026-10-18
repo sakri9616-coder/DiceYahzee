@@ -10,6 +10,8 @@ namespace ParvaMirabilia.Presentation
         private Image _sdImpactFlash;
         private Image _sdImpactScreenFlash;
         private readonly Vector2[] _sdImpactNpcTextHomes = new Vector2[3];
+        private static Vector2 SDChargeOffset(float time, int index, float energy) => DuelPresentation.SDChargeOffset(time, index, energy);
+        private static float SDChargeSign(float time, int index) => DuelPresentation.SDSign(time, index);
         private readonly Vector3[] _sdImpactRotations = new Vector3[5];
         private readonly Vector3[] _sdImpactScales = new Vector3[5];
         private Vector2 _sdImpactNpcHome;
@@ -132,38 +134,32 @@ namespace ParvaMirabilia.Presentation
             {
                 _sdImpactContact = true;
                 var round = _sdEngine.LastRound;
-                GameAudio.Play(round.DamageToNpc > 0 ? "hit" : round.DamageToPlayer > 0 ? "hurt" : "guard");
+                GameAudio.Play(SDImpactSound(round.DamageToNpc, round.DamageToPlayer));
             }
             float hold = _sdReducedMotion ? .035f : .045f + .022f * _sdImpactTier;
             // Ported from the online clash hold (UpdateOnlineWaitingDice): the committed hand
             // shivers die by die at 38 rad/s with an i*1.7 phase offset, +-4.6 across and 3.0 down
             // with a 2.6 pull away from the contact. The clash spends that same shiver on its own
             // five dice; its tier-scaled fade reaches exactly zero, so the dice still land home.
-            float shiver = _sdReducedMotion || after < 0 ? 0 : Mathf.Clamp01(1 - after / (.26f + .04f * _sdImpactTier));
+            // Energy discharge: a high-frequency, subpixel-to-1.5px jitter replaces the previous
+            // 38 rad/s wobble. Amplitude ramps in with the impact and decays with a per-die phase,
+            // so dice charge visibly above the contact frame and settle exactly home.
+            float energy = _sdReducedMotion || after < 0 ? 0 : Mathf.Clamp01(1 - after / (.22f + .03f * _sdImpactTier));
             for (int i = 0; i < 5; i++)
             {
                 var die = (RectTransform)_sdBattle.Find("Die" + i);
                 Vector2 target = contact + new Vector2((i - 2) * 64, -10);
                 Vector2 origin = _sdDieHomes[i] + Vector2.down * _sdLaunchPull;
-                Vector2 tremble = Vector2.zero;
-                if (shiver > 0)
-                {
-                    float phase = Time.unscaledTime * 38 + i * 1.7f;
-                    tremble = new Vector2(Mathf.Sin(phase) * 4.6f, -2.6f + Mathf.Sin(phase * .83f) * 3.0f) * shiver;
-                }
                 if (!_sdReducedMotion)
                 {
                     if (age < SDImpactContactDelay)
                     {
-                        // The waiting hand shivers on the two axes the online table uses for an
-                        // already-declared side: it breathes in over the first beat and stills
-                        // exactly as the strike lands, where the contact shake takes the row over.
+                        // Both hands load the same compact energy tremor before contact.
                         float amp = Mathf.Min(Mathf.SmoothStep(0, 1, Mathf.Clamp01(age / .07f)),
                             Mathf.Clamp01((SDImpactContactDelay - age) / .05f));
-                        float shiverPhase = _sdAttackAge * 47f;
                         if (_sdNpcReveal != null)
                             _sdNpcReveal.anchoredPosition = _sdImpactNpcHome +
-                                new Vector2(Mathf.Sin(shiverPhase) * 4.6f, Mathf.Sin(shiverPhase * .83f) * 3.0f) * amp;
+                                SDChargeOffset(age, 5, amp);
                         float t = Mathf.Clamp01(age / SDImpactContactDelay);
                         // Two beats with a punch dial: the hand rears back and stretches, then
                         // whips forward - most of the distance lands in the middle and the peak
@@ -178,7 +174,7 @@ namespace ParvaMirabilia.Presentation
                         float eased = -dip + (1f + dip) * Mathf.Pow(blast, power);
                         Vector2 position = Vector2.LerpUnclamped(origin, target, eased);
                         position.x += Mathf.Sin(t * Mathf.PI) * (i - 2) * 12;
-                        die.anchoredPosition = position;
+                        die.anchoredPosition = position + SDChargeOffset(age, i, amp);
                         float peak = 1.10f + .02f * _sdImpactPunch;
                         float stretch = t < wind ? Mathf.Lerp(1f, peak, rear) : Mathf.Lerp(peak, .82f, blast);
                         die.localScale = _sdImpactScales[i] * stretch;
@@ -196,12 +192,18 @@ namespace ParvaMirabilia.Presentation
                     {
                         float t = Mathf.Clamp01((after - hold) / (SDImpactDuration - SDImpactContactDelay - hold));
                         float eased = 1 - Mathf.Pow(1 - t, 3);
-                        // Additive only: the timeline above keeps owning the base pose, so the shiver
-                        // can never accumulate into a drift and the reset still writes the exact home.
-                        die.anchoredPosition = Vector2.Lerp(target, _sdDieHomes[i], eased) + Vector2.down * (Mathf.Sin(t * Mathf.PI) * 20) + tremble;
-                        float squash = after < hold ? .68f : Mathf.Lerp(.68f, 1, eased);
-                        die.localScale = _sdImpactScales[i] * squash;
-                        die.localEulerAngles = Vector3.Lerp(_sdImpactRotations[i] + new Vector3(0, 0, (i - 2) * 12), _sdImpactRotations[i], eased);
+                        // The die body keeps its single eased return; the energy jitter is added
+                        // purely as a per-frame offset so it can never drift the restored home.
+                        Vector2 body = Vector2.Lerp(target, _sdDieHomes[i], eased);
+                        Vector2 jitter = SDChargeOffset(_sdAttackAge, i, energy);
+                        die.anchoredPosition = body + Vector2.down * (Mathf.Sin(t * Mathf.PI) * 14) + jitter;
+                        float squash = after < hold ? .72f : Mathf.Lerp(.72f, 1, eased);
+                        // Small extra compress driven by the same jitter peak keeps the "charge"
+                        // read without adding a second scaling timeline that could linger.
+                        float pulse = 1f - .02f * energy * (1 - t) * (1 + Mathf.Sin(_sdAttackAge * 55f + i * 1.1f));
+                        die.localScale = _sdImpactScales[i] * squash * pulse;
+                        float twist = SDChargeSign(_sdAttackAge, i) * .7f * energy * (1 - t);
+                        die.localEulerAngles = Vector3.Lerp(_sdImpactRotations[i] + new Vector3(0, 0, (i - 2) * 12), _sdImpactRotations[i], eased) + new Vector3(0, 0, twist);
                     }
                 }
             }

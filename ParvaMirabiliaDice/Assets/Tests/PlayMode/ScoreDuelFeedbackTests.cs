@@ -116,7 +116,7 @@ namespace ParvaMirabilia.Quality.Tests
             slider.value = .5f;
             Assert.That(GameAudio.Volume, Is.EqualTo(.5f).Within(.001f));
             AudioSource[] sources = GameAudio.Instance.GetComponents<AudioSource>();
-            Assert.That(sources[0].volume, Is.EqualTo(.1575f).Within(.001f), "BGM gain is 30% below the previous 0.45 cap");
+            Assert.That(sources[0].volume, Is.EqualTo(.0945f).Within(.001f), "BGM maximum is 40% below the previous 0.315 cap");
             slider.value = 0f;
             Assert.That(sources[0].volume, Is.Zero);
             GameAudio.SetVolume(original);
@@ -914,14 +914,12 @@ namespace ParvaMirabilia.Quality.Tests
             Write("_sdGuideAge", 1.35f);
             Call("SDTickGestureGuides", 0f);
             Vector2 bottomMouse = mouse.anchoredPosition;
-            float bottomAlpha = mouse.GetComponent<Image>().color.a;
             Write("_sdGuideAge", 1.62f);
             Call("SDTickGestureGuides", 0f);
-            Assert.That(mouse.anchoredPosition.y, Is.EqualTo(bottomMouse.y).Within(.01f), "the guide never slides upward after reaching the bottom");
-            Assert.That(mouse.GetComponent<Image>().color.a, Is.LessThan(bottomAlpha), "the guide fades at the bottom");
+            Assert.That(mouse.anchoredPosition.y, Is.GreaterThan(bottomMouse.y), "the mouse glides back before the loop boundary");
             Write("_sdGuideAge", 1.78f);
             Call("SDTickGestureGuides", 0f);
-            Assert.That(mouse.GetComponent<Image>().color.a, Is.EqualTo(.55f).Within(.02f), "the guide dims to its legibility floor rather than vanishing before returning home");
+            Assert.That(mouse.anchoredPosition.y, Is.EqualTo(firstMouse.y).Within(.01f), "the return reaches home before the next cycle");
             Write("_sdGuideAge", 1.9f);
             Call("SDTickGestureGuides", 0f);
             Assert.That(mouse.anchoredPosition.y, Is.EqualTo(firstMouse.y).Within(.01f), "the next cycle starts at the original position");
@@ -1085,7 +1083,7 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(version, Is.Not.Null, "the title stamps its build tag");
             var text = version.GetComponent<Text>();
             Assert.That(text, Is.Not.Null, "the tag is a text");
-            Assert.That(text.text, Is.EqualTo("Ver.0.1"));
+            Assert.That(text.text, Is.EqualTo("Ver.0.2"));
             // It shares the bottom chrome row with the menu and the volume bar, inside their
             // free span; nothing may park on top of it again.
             Assert.That(((RectTransform)version).anchoredPosition, Is.EqualTo(new Vector2(280f, -319f)));
@@ -1189,7 +1187,7 @@ namespace ParvaMirabilia.Quality.Tests
             var kind = Read<ScoreHandKind>("_sdSelectedKind");
             var offer = ScoreRules.Evaluate(kind, Engine.PlayerDice);
             float factor = offer.IsFormed ? ScoreRules.MultiplierQuarters(kind) / 4f : 1f;
-            Assert.That(Read<Text>("_sdBreakdown").text, Is.EqualTo(offer.BaseScore + " ×" + factor.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)));
+            Assert.That(Read<Text>("_sdBreakdown").text, Is.EqualTo("(20 + " + (offer.BaseScore - 20) + ") ×" + factor.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)));
             Assert.That(Read<Text>("_sdNpcScoreNumber").text, Is.EqualTo(Engine.Intent.Score.ToString()));
         }
         private Vector2 ScreenAtDie(int index) => RectTransformUtility.WorldToScreenPoint(null, Die(index).TransformPoint(Vector3.zero));

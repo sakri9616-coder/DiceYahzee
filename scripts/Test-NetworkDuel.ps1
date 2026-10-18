@@ -4,6 +4,7 @@ param(
     [switch]$Disconnect,
     [switch]$DisconnectHost,
     [switch]$Visual,
+    [switch]$Rematch,
     [int]$Width = 1280,
     [int]$Height = 720
 )
@@ -25,10 +26,11 @@ $guestProcess = $null
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 try {
     $headless = if ($Visual) { @('-batchmode', '-screen-width', "$Width", '-screen-height', "$Height") } else { @('-batchmode', '-nographics') }
-    $hostProcess = Start-Process -FilePath $exePath -ArgumentList ($headless + @('-logFile', $hostLog, '-diceNetHost', $codeFile)) -WindowStyle Hidden -PassThru
+    $extra = if ($Rematch) { @('-diceNetRematch') } else { @() }
+    $hostProcess = Start-Process -FilePath $exePath -ArgumentList ($headless + @('-logFile', $hostLog, '-diceNetHost', $codeFile) + $extra) -WindowStyle Hidden -PassThru
     while (-not (Test-Path -LiteralPath $codeFile) -and (Get-Date) -lt $deadline -and -not $hostProcess.HasExited) { Start-Sleep -Milliseconds 500 }
     if (-not (Test-Path -LiteralPath $codeFile)) { throw "Host did not create a join code. Evidence: $hostLog" }
-    $guestProcess = Start-Process -FilePath $exePath -ArgumentList ($headless + @('-logFile', $guestLog, '-diceNetJoin', $codeFile)) -WindowStyle Hidden -PassThru
+    $guestProcess = Start-Process -FilePath $exePath -ArgumentList ($headless + @('-logFile', $guestLog, '-diceNetJoin', $codeFile) + $extra) -WindowStyle Hidden -PassThru
     if ($DisconnectHost) {
         while ((Get-Date) -lt $deadline -and -not $hostProcess.HasExited -and -not $guestProcess.HasExited -and
             -not ((Test-Path -LiteralPath $hostTrace) -and (Select-String -Path $hostTrace -Pattern 'DICE_NET_SMOKE player=0 round=1' -Quiet) -and
@@ -58,6 +60,14 @@ try {
         throw "Guest did not type the invite code through the visible input field. Evidence: $evidence"
     }
     $hostComplete = Select-String -Path $hostTrace -Pattern 'DICE_NET_SMOKE COMPLETE winner=(\d+)' | Select-Object -Last 1
+    if ($Rematch) {
+        foreach ($trace in @($hostTrace, $guestTrace)) {
+            if (-not (Select-String -LiteralPath $trace -Pattern 'DICE_NET_SMOKE REMATCH_STARTED generation=1 hp=300,300' -Quiet) -or
+                -not (Select-String -LiteralPath $trace -Pattern 'DICE_NET_SMOKE LOBBY_READY' -Quiet)) {
+                throw "Rematch or lobby interaction not verified: $trace"
+            }
+        }
+    }
     $guestComplete = if (Test-Path -LiteralPath $guestTrace) { Select-String -Path $guestTrace -Pattern 'DICE_NET_SMOKE COMPLETE winner=(\d+)' | Select-Object -Last 1 }
     $hostInterrupted = Select-String -Path $hostTrace -Pattern 'DICE_NET_SMOKE INTERRUPTED' -Quiet
     if ($Disconnect) {

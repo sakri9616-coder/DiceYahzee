@@ -87,8 +87,8 @@ namespace ParvaMirabilia.Quality.Tests
                 Assert.That(track.rect.Contains((Vector2)line.rectTransform.localPosition), Is.True,
                     "the health line must stay within its own bar");
                 Assert.That(line.fontSize, Is.EqualTo(18), "health and its drop share one size");
-                Assert.That(line.fontStyle, Is.EqualTo(FontStyle.Normal),
-                    "a faked bolder weight was only there to survive the drain band");
+                Assert.That(line.fontStyle, Is.EqualTo(FontStyle.Bold),
+                    "health text follows the shared heavier text face");
                 var edge = line.GetComponent<Outline>();
                 Assert.That(edge, Is.Not.Null, "the line still needs a dark edge where it crosses the drain band");
                 Assert.That(Mathf.Abs(edge.effectDistance.x), Is.LessThanOrEqualTo(1.5f),

@@ -27,6 +27,7 @@ namespace ParvaMirabilia.Presentation
 
         internal void SDPointerBegin(int index, Vector2 screen)
         {
+            if (OnlineActive) { OnlinePointerBegin(index, screen); return; }
             if (!SDCanPlan || index < -1 || index >= 5) return;
             SDResetHandEffects();
             _sdDragging = true; _sdDragAiming = false; _sdDragIndex = index;
@@ -43,6 +44,7 @@ namespace ParvaMirabilia.Presentation
 
         internal void SDPointerMove(Vector2 screen)
         {
+            if (OnlineActive) { OnlinePointerMove(screen); return; }
             if (!_sdDragging) return;
             if (!SDCanPlan) { SDCancelPointer(); return; }
             Vector2 point = SDPointerLocal(screen), delta = point - _sdDragStart;
@@ -99,6 +101,7 @@ namespace ParvaMirabilia.Presentation
 
         internal void SDPointerEnd(Vector2 screen)
         {
+            if (OnlineActive) { OnlinePointerEnd(screen); return; }
             if (!_sdDragging) return;
             SDPointerMove(screen);
             if (!_sdDragging) return;

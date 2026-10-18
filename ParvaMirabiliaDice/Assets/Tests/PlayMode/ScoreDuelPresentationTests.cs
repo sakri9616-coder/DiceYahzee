@@ -393,7 +393,7 @@ namespace ParvaMirabilia.Quality.Tests
                 Assert.That(bounds.center.y, Is.EqualTo(bar.center.y).Within(.1f), field + " sits inside the thicker health bar");
                 Assert.That(bar.height, Is.GreaterThanOrEqualTo(16f));
                 Assert.That(label.alignment, Is.EqualTo(TextAnchor.MiddleCenter));
-                Assert.That(label.fontStyle, Is.EqualTo(FontStyle.Normal), field + " keeps health and damage in one face");
+                Assert.That(label.fontStyle, Is.EqualTo(FontStyle.Bold), field + " uses the shared heavier text face");
                 Assert.That(label.text, Does.StartWith(npcSide ? "相手 " : "あなた "),
                     "the centered line opens with the side it belongs to");
                 Assert.That(label.text, Does.Not.Contain(" / "), "health prints as one figure, not a spaced pair");

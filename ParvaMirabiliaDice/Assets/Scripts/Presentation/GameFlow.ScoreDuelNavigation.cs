@@ -12,11 +12,12 @@ namespace ParvaMirabilia.Presentation
         private float _sdNpcReplayAge = -1;
         private int _sdNpcReplayStep;
 
-        internal bool SDCanAdvanceTable => _sdEngine != null && _sdBattle.gameObject.activeInHierarchy &&
+        internal bool SDCanAdvanceTable => OnlineActive ? OnlineCanAdvance : _sdEngine != null && _sdBattle.gameObject.activeInHierarchy &&
             _sdCommitted && _sdAttackAge < 0 && !SDModalOpen && _sdInputFrame != Time.frameCount;
 
         internal void SDTableClick()
         {
+            if (OnlineActive) { if (OnlineCanAdvance) SendOnline(DuelNetworkAction.Continue); return; }
             if (!SDCanAdvanceTable) return;
             _sdInputFrame = Time.frameCount;
             SDAdvance();

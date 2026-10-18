@@ -1075,6 +1075,7 @@ namespace ParvaMirabilia.Presentation
         {
             // Every Awake has run by now, so GameAudio knows the saved volume step.
             RefreshSoundLabel();
+            StartPrivateUpdateCheck();
             BeginPlayerSmokeIfRequested();
         }
 

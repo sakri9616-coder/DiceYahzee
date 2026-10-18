@@ -19,6 +19,7 @@ if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $reportPath) -or -n
 $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
 if ($report.result -ne 'Succeeded' -or $report.errors -ne 0) { throw "Build report failed: $reportPath" }
 Copy-Item -LiteralPath (Join-Path $workspace 'README.md') -Destination (Join-Path $output 'README.md')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'DiceYahzee-Update.ps1') -Destination (Join-Path $output 'DiceYahzee-Update.ps1')
 Copy-Item -LiteralPath (Join-Path $workspace 'docs\ASSET_LICENSES.md') -Destination (Join-Path $output 'ASSET_LICENSES.md')
 $licenseOutput = Join-Path $output 'Licenses'
 New-Item -ItemType Directory -Path $licenseOutput -Force | Out-Null

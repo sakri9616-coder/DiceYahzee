@@ -4,6 +4,7 @@ $ErrorActionPreference = 'Stop'
 $build = [System.IO.Path]::GetFullPath($BuildDirectory).TrimEnd('\', '/')
 $required = @(
     'DiceYahzee.exe',
+    'DiceYahzee-Update.ps1',
     'UnityPlayer.dll',
     'DiceYahzee_Data\data.unity3d',
     'MonoBleedingEdge\EmbedRuntime\mono-2.0-bdwgc.dll',
