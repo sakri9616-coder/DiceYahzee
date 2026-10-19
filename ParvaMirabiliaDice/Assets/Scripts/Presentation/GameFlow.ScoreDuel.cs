@@ -1033,7 +1033,7 @@ namespace ParvaMirabilia.Presentation
                 _sdHitAge += dt;
                 _sdHit.rectTransform.localScale = Vector3.one * (_sdReducedMotion ? 1 : Mathf.Lerp(1.17f, 1, Mathf.Clamp01(_sdHitAge * 4)));
             }
-            if (_sdHpAge >= 0 && _sdEngine != null && !SDModalOpen && (_sdAttackAge < 0 || _sdAttackAge >= SDImpactContactDelay))
+            if (_sdHpAge >= 0 && _sdEngine != null && !SDModalOpen && (_sdAttackAge < 0 || _sdAttackAge >= SharedAttackPresenter.ContactTime))
             {
                 _sdHpAge += dt;
                 float t = Mathf.Clamp01(_sdHpAge / .85f);

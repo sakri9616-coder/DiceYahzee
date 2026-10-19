@@ -107,7 +107,10 @@ namespace ParvaMirabilia.Quality.Tests
         [UnityTest] public IEnumerator SoloGestureCanCommitBeforeOpponentFinishesRerolling()
         {
             var duel = new VersusDuel(617); duel.Begin(); Publish(duel);
-            yield return new WaitForSecondsRealtime(.5f);
+            var rollingProp = typeof(GameFlow).GetProperty("OnlineRolling", Private);
+            float deadline = Time.realtimeSinceStartup + 2f;
+            while ((bool)rollingProp.GetValue(flow) && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.That((bool)rollingProp.GetValue(flow), Is.False, "the online roll must settle before the gesture");
             Canvas.ForceUpdateCanvases();
             var own = Read<RectTransform[]>("_onlineOwnDice")[0];
             Vector2 start = RectTransformUtility.WorldToScreenPoint(null, own.position);

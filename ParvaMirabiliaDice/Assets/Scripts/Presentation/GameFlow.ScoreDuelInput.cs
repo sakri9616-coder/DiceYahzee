@@ -12,6 +12,9 @@ namespace ParvaMirabilia.Presentation
         private readonly bool[] _sdDragPainted = new bool[5];
         private readonly Vector2[] _sdDieHomes = new Vector2[5];
         private float _sdAttackAge = -1;
+        // Opt-in smoke/test-only age freeze. Null in ordinary play; the ticker then advances
+        // normally, but a capture can pin one authored phase across render boundaries.
+        private float? _sdSmokeAttackAgeOverride;
         private float _sdWheelRemainder;
         private const float SDFlickDistance = 28;
         private float _sdLaunchPull;
@@ -190,17 +193,33 @@ namespace ParvaMirabilia.Presentation
         private void SDStartAttackMotion()
         {
             SDResetHandEffects();
+            // Capture actual idle homes first, clear any transient launch pull, and let only
+            // SharedAttackPresenter own movement from here. Never pre-displace before Begin,
+            // or Reset restores pulled-down positions instead of the idle homes.
+            _sdLaunchPull = 0f;
             for (int i = 0; i < 5; i++) _sdDieHomes[i] = ((RectTransform)_sdBattle.Find("Die" + i)).anchoredPosition;
             _sdAttackAge = 0;
             SDBeginImpactPresentation();
-            if (!_sdReducedMotion)
-                for (int i = 0; i < 5; i++) ((RectTransform)_sdBattle.Find("Die" + i)).anchoredPosition = _sdDieHomes[i] + Vector2.down * _sdLaunchPull;
         }
 
         private void SDTickAttackMotion(float dt)
         {
-            if (_sdAttackAge < 0 || SDModalOpen) return;
-            _sdAttackAge += dt;
+            if (_sdAttackAge < 0) return;
+            // An opt-in smoke/test pin reproduces one authored age exactly across frames.
+            if (_sdSmokeAttackAgeOverride.HasValue) _sdAttackAge = _sdSmokeAttackAgeOverride.Value;
+            else _sdAttackAge += dt;
+            if (SDModalOpen)
+            {
+                // Modal interrupted the attack: reset/hide the visuals but keep the age clock
+                // running to Duration so the advance gate does not clear early. Do NOT redraw
+                // the presenter above the modal on resume.
+                if (_sdAttackPresenter != null) _sdAttackPresenter.Reset();
+                _sdImpactContact = false;
+                if (_sdImpactCounter != null) _sdImpactCounter.text = "";
+                if (_sdImpactIncomingCounter != null) _sdImpactIncomingCounter.text = "";
+                if (_sdAttackAge >= SDImpactDuration) SDResetImpactPresentation();
+                return;
+            }
             SDAnimateImpactPresentation();
             if (_sdAttackAge >= SDImpactDuration)
             {

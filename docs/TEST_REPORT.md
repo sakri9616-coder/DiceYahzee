@@ -1318,3 +1318,14 @@ SDImpactContactDelay = .30 は変更していない。全変更は base commit 7
 - 最終 Windows 非Development ビルドは `Builds/Windows-20261019-015656-269`、Succeeded / errors=0 / warnings=1 / version=0.2.2。実プレイヤーは1024×768（`logs/player-v022-guide-chance-final-4x3`）と1280×720（`logs/player-v022-guide-chance-final-16x9`）の両方で終了0・417チェック・errors=[]。
 - 同フォルダーの `gesture-guide-start-visible.png`、`gesture-guide-downward-travel.png`、`gesture-guide-fading.png`、`gesture-guide-fading-hidden.png`、`gesture-guide-invisible-reset.png`、`gesture-guide-next-visible-cycle.png` を実画像で確認した。診断時のみ時刻を固定し、実フレームの描画更新後に各段階を撮影する。通常プレイでは固定しない。`chance-glow.png` でも赤い発光の強化と出目の可読性を確認した。練習の同じ周期と控えめ設定の静止表示も実行版チェックに含む。
 - 今回はネットワーク処理を変更しておらず、2プロセス Relay の再実行は行っていない。版間の実際の自動差し替えも今回の確認範囲には含めない。
+
+## 33. 共通のダイス衝突演出と招待コードコピー（2026-10-19、0.2.3）
+
+- 実装と回帰テストは、許可された Experiential DeepSeek API と OpenCode CLI の `opencode/deepseek-v4.1-flash-free` に依頼した。Codex はプロンプト、差分の適用・レビュー、検証を担当した。
+- `SharedAttackPresenter` をシングルとオンラインで共有する。背景を暗くし、明るい5個の塊同士が衝突・押し合いを行い、役倍率と片側だけの Chance による入れ替えを反映した勝者が相手の HP へ着弾する。同点では双方が分離する。衝突0.24秒、着弾0.64秒、復帰完了0.90秒。実際の同時ダメージ計算と通信の権限処理は変更していない。
+- 成立役の描画も `ScoreFormationPresenter` に抽出して共有した。オンラインの振り直しはシングルと同じ時間設定を使う。ドラッグ、Chance、送信、ヘルプ、切断、次ラウンドで演出を適切に解除する。ホスト待機中の「コードをコピー」は、確定した招待コードだけをクリップボードへ書き、通知を別表示する。
+- EditMode 全158/158成功：`logs/validation-editmode-20261019-155746-156.xml`。PlayMode 全131件の実行は130成功・1失敗：`logs/validation-playmode-20261019-160246-044.xml`。失敗は旧テストが投擲の完了前に固定0.5秒で操作していたためで、実際の `OnlineRolling` の終了を上限付きで待つ検証へ修正した。実装は変更せず、該当テスト群の再実行4/4成功：`logs/validation-playmode-20261019-160718-381.xml`。この修正後の全131件再実行は行っていない。オンライン共有演出の追加7件、共有攻撃の10件、コピーの4件は全体実行に含まれる。
+- Windows 非Development ビルド：`Builds/Windows-20261019-160748-232`。Succeeded、errors=0、warnings=1、version=0.2.3、Unity 6000.3.25f1、Direct3D11。画面上の版号は `Ver.0.2` を維持する。
+- 実行版は1280×720の `logs/player-v023-16x9` と1024×768の `logs/player-v023-4x3` が共に終了0、passed=true、431チェック、errors=[]。`attack-presenter-own-win-loading/collision/push/strike/recovery.png`、`attack-presenter-enemy-win-strike.png`、`attack-presenter-tie-strike.png` は診断専用の時刻固定と実フレーム境界を使って撮影する。衝突・押し合い・両方向の着弾・4:3の描画を実画像で確認した。通常プレイでは時刻を固定しない。
+- 実際の Relay に接続した2プロセス検証：`logs/network-duel-20261019-160906-886`、Passed、57同期状態、両側終了0。両側の記録に `REMATCH_STARTED generation=1 hp=300,300`、`COMPLETE winner=1`、`LOBBY_READY` があり、再戦から結果・ロビー復帰まで成功した。`host-online-impact.png` で共通の暗転と衝突描画も確認した。
+- クリップボードの正確な内容・通知・状態解除は PlayMode で確認した。実ネットワークのホスト待機中に物理マウスでコピーボタンを押す確認、および公開後の実際の版間自動差し替えは今回の検証には含めない。

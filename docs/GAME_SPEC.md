@@ -8,7 +8,7 @@
 | --- | --- |
 | タイトル | DiceYahzee |
 | 副題 | D I C E   D U E L |
-| 版号表示 | `Ver.0.2`（ビルド版号 `0.2.2`） |
+| 版号表示 | `Ver.0.2`（ビルド版号 `0.2.3`） |
 | ジャンル | 5d6 を振り直して役を作り、同時ダメージで相手の HP を削る 1 人用の短い対戦 |
 
 タイトル画面は縦に、見出し「DiceYahzee」（58px・Aoboshi One、y=220）、副題（13px、y=166）、例示の 5 ダイス（86px 角、間隔 106、y=67、出目 1・1・1・4・5 のうち左 3 個を保持表示）、相手 5 種のボタン列（y=-65）、相手の説明行（y=-112）、「対局開始」（y=-162）、「練習」（y=-241・左）、「遊び方」（y=-241・右）を並べる。`Ver.0.2` は 14px・右寄せ（box 170×26）で、画面下段 y=-319 に、メニューの ≡ 記号（(-554,-319)・46×38・22px アイコン）と音量バー（(451,-319)）・消音トグル（(554,-319)・46×38・24px アイコン）と同じ帯に置く。版号はこの帯の空き位置（x=280）に収まる。
@@ -185,34 +185,44 @@
 
 ## 7. 影響演出
 
-攻撃の演出は 1 本の明示的な時間軸で進む。5 ダイスは 0.30 秒で相手へ接触し、全体は段階に応じて `SDImpactDuration = 0.76 + tier×0.03` 秒（0.76 / 0.79 / 0.82 / 0.85）で終わる。
+攻撃の演出は共通の `SharedAttackPresenter` が 1 本の時間軸で進める。全体は `Duration = 0.90` 秒で、次の時刻に段階が切り替わる。
 
-段階は攻撃側の値で決まる。実被害は 2 つの大きい方、発射の punch は 2 つの点数の大きい方を使う。
+| 時刻 | 段階 | 内容 |
+| --- | --- | --- |
+| 0.12 | `LoadingEnd` | 5 ダイスが相手へ向かう移動を始める |
+| 0.24 | `CollisionTime` | 5 ダイスが中央で接触する |
+| 0.28 | `HitStopEnd` | 接触の静止が終わる |
+| 0.44 | `PushEnd` | 押し込みが終わる |
+| 0.54 | `BreakthroughEnd` | 勝ち側の手が相手側へ抜ける |
+| 0.64 | `ContactTime` | 勝ち側の手が相手の HP へ到達する |
+| 0.70 | `RecoilStart` | 原状へ戻る動きを始める |
+| 0.90 | `Duration` | 原状に復帰し、暗幕と演出を消す |
 
-| 段階 | 実被害の条件（`max(DamageToNpc, DamageToPlayer)`） |
+勝敗は `Begin` へ渡す `ownAttacks` と `enemyAttacks` の比較で決める。両者は基礎点・役倍率を含む計算済みの手全体の攻撃値で、等しければ勝敗なし（`Winner = -1`）とし、両手を中央で接触させる。相手の HP へ抜けるのは勝ち側（大きい側）の手であり、負け側の手ではない。両者の一方だけが Chance を宣言したときは攻撃側の own／enemy の対応を入れ替え、入れ替え後の比較で勝ち側を決める。
+
+| 項目 | 内容 |
 | --- | --- |
-| 0 | 30 未満 |
-| 1 | 30 以上 50 未満 |
-| 2 | 50 以上 80 未満 |
-| 3 | 80 以上 |
+| 表示ダイス寸法 | 60px 角（`DisplaySize`） |
+| ダイスの間隔 | 64px（`SlotSpacing`） |
+| 接触時の 2 手の間隔 | 2px（`BodyGap`） |
+| 押し込み量 | 22px（`PushDistance`） |
+| 抜け量 | 80px（`DeflectDistance`） |
+| 暗幕の濃さ | 0.55（`LoadingDim`） |
+| 暗幕のフェード | 0.08 秒（`DimFadeTime`） |
+| 暗幕の並び | `OverlaySortOrder = 500` |
+| ダイスの並び | `DieSortOrder = 510`（暗幕より上） |
 
-| punch | 点数の条件（`max(PlayerScore, NpcScore)`） |
-| --- | --- |
-| 0 | 50 未満 |
-| 1 | 50 以上 100 未満 |
-| 2 | 100 以上 130 未満 |
-| 3 | 130 以上 |
+標準の演出では、0.12 秒から移動を始め、0.24 秒に接触し、勝ち側は相手側へ 22px 押し込み、負け側は薄くなる。勝ち側の手は 0.54 秒から相手の HP へ向かい、0.64 秒に到達する。勝敗なしでは両手をそれぞれ 36px 抜き合わせる。
 
-発射の挙動は punch で決まる。
+暗幕は `LoadingDim` で 0.55 の黒を敷く。標準演出の暗幕は開始時に 0.08 秒でフェードインし、全体終了前の 0.10 秒で消える。ダイスは `DieSortOrder = 510` の Canvas で暗幕より上に描く。
 
-| 項目 | 式 |
-| --- | --- |
-| ため（wind） | `0.14 + 0.02×punch` |
-| 沈み（dip） | `0.14 + 0.05×punch` |
-| 振りの強さ（power） | `1.6 + 0.35×punch` |
-| 伸びの頂点 | `1.10 + 0.02×punch` |
+控えめ設定ではダイスを移動させない。接触の 0.24 秒以降、中央に静止した接触線（幅 80px・高さ 3px・強さで ±6%）を出し、火花と拡散を行わない。
 
-卓の揺れは接触の瞬間から 0.42 秒の窓で収まり、振幅は `(5 + 4.5×punch) × decay²`、X は `sin(after×54)`、Y は `sin(after×63 + 1.1)×0.72` を使う。点数が 100 未満なら punch は 0 で振幅は 5 に留まる。控えめ設定では揺れも飛行も行わない。接触の瞬間に HP の減少と音（相手への実被害があれば `hit`、自分への被害があれば `hurt`、どちらも無ければ `guard`）がそろう。ダメージの数字は別枠へ散らさず、被害を受けた側の HP バーの 1 行に出す。
+`Reset` は全ダイスの親・兄弟順・ローカル位置・回転・拡大・Canvas 設定・`CanvasGroup` の値を `CaptureHand` の時点へ戻し、暗幕を透明、接触線と衝撃点を非表示、`winner=-1` にする。`Sample(Duration)` も同じ原状復帰を通るため、演出の見た目は元へ戻る。ただし `Active` は `Reset` まで真のままであり、`Sample` を通しただけでは攻撃演出が終わった扱いにはならない。判定は `Active` と `Reset` で管理する。
+
+操作ガイドは右側の x=350 に置く。マウス記号は下引きの 3 段の山形を示し、1.8秒周期でマウスと矢印が一緒に42px下へ移動し、両方が完全に消えてから初期位置へ戻って再生する。見えている間は上へ戻らない。3 個保持すると右クリックの図形へ変わる。ホイール記号は内側だけ上下 4px 動く。攻撃後は「次へ」の輪を示し、ボタン以外の背景・ダイス・無効領域のクリックで次ラウンドへ進む。演出終了前の押下と同じ入力の二重実行は `_sdInputFrame` で防ぐ。投擲中・確定後・モーダルではガイドを隠す。
+
+「成立時の動き：控えめ」を選ぶと、移動・拡大・光・迷いを抑え、成立した役と点数は同じように伝える。設定は `arcane.reducedMotion` に保存する。控えめのときはガイドを静止表示し、揺れ・飛行・パルスを行わない。
 
 中央の得点数字は確定表示のときだけ点数で大きさを変える。
 
@@ -223,9 +233,9 @@
 | 100 以上 130 未満 | 72 |
 | 130 以上 | 80 |
 
-確定前の予告数字は 64 に固定し、約束の数字が踊らないようにする。相手の予告数字は 50 である。HP バーは厚さ 36 で、減少は 0.85 秒かけて書き換える。行の形式は「あなた 300/300 −35」「相手 250/250 −35」の 1 行で、被害だけを `SDDamageInk`(193,39,45) の赤で示す。
+確定前の予告数字は 64 に固定し、約束の数字が踊らないようにする。相手の予告数字は 50 である。HP バーは厚さ 36 で、減少は 0.85 秒かけて書き換える。単体戦では 0.85 秒の減少は勝ち側の手が相手の HP へ到達する `ContactTime = 0.64` の後に始まる。行の形式は「あなた 300/300 −35」「相手 250/250 −35」の 1 行で、被害だけを `SDDamageInk`(193,39,45) の赤で示す。
 
-役成立の演出は役ごとの段階で規模を変える。
+役成立の演出は役ごとの段階で規模を変える。成立の判定は攻撃の前に、手が揃った時点で行い、その演出を出す。
 
 | 役 | 段階 | 演出時間（通常 / 控えめ） | 火花 |
 | --- | --- | --- | --- |
@@ -235,7 +245,7 @@
 | フォーカインド・大ストレート | 3 | 0.84 / 0.30 | 19 |
 | ヤッツィー | 4 | 1.02 / 0.30 | 28 |
 
-**根拠**: `Presentation/GameFlow.ScoreDuelImpact.cs`（`SDImpactContactDelay`, `SDImpactDuration`, `SDAnimateImpactPresentation`）, `Presentation/GameFlow.ScoreDuel.cs`（`SDScoreFontFor`, `SDRefresh`, `SDBuildHudDetails`）, `Presentation/GameFlow.ScoreDuelEffects.cs`（`SDPlayHandEffects`, `SDHandEffectTier`）, `Presentation/GameFlow.ScoreDuelLayout.cs`（`SDHealthLine`, `SDDamageInk`, `SDAnimateHpLoss`）, `Tests/PlayMode/ScoreDuelFeedbackTests.cs`（`FourOutgoingDamageTiersDrawDifferentContactGeometry_AndRecoverOriginalDice`, `TheLaunchCocksBackThenWhipsAndTheBigScoresShakeTheTable`, `TheCentralNumeralSwellsWithTheScore`）
+**根拠**: `Presentation/SharedAttackPresenter.cs`（`Duration`, `LoadingEnd`, `CollisionTime`, `HitStopEnd`, `PushEnd`, `BreakthroughEnd`, `ContactTime`, `RecoilStart`, `DisplaySize`, `SlotSpacing`, `BodyGap`, `PushDistance`, `DeflectDistance`, `LoadingDim`, `DimFadeTime`, `OverlaySortOrder`, `DieSortOrder`, `Begin`, `Sample`, `Reset`, `ApplyReduced`, `ComputePose`, `RestoreAll`）, `Presentation/GameFlow.ScoreDuelImpact.cs`（`SDAnimateImpactPresentation`）, `Presentation/GameFlow.ScoreDuel.cs`（`SDScoreFontFor`, `SDRefresh`, `SDBuildHudDetails`）, `Presentation/GameFlow.ScoreDuelEffects.cs`（`SDPlayHandEffects`, `SDHandEffectTier`）, `Presentation/GameFlow.ScoreDuelLayout.cs`（`SDHealthLine`, `SDDamageInk`, `SDAnimateHpLoss`）, `Presentation/GameFlow.ScoreDuelGuides.cs`（`SDGuideX`, `SDTickGestureGuides`, `SDDrawGestureGuide`）, `Tests/PlayMode/ScoreDuelFeedbackTests.cs`（`TheCentralNumeralSwellsWithTheScore`）
 
 ## 8. キャリー（保存枠）
 
@@ -306,7 +316,11 @@
 
 公開の段階は次のとおり。ラウンド開始の初回出目は両者へ公開し、振り直しの最中は相手の出目を開始時の値で伏せ、双方が振り直しを終えた時点で最終の出目をそろって公開する。提出した役・得点・持越と、その役を使った事実は双方の提出まで相手向けスナップショットから隠す。
 
-オンライン画面はロビー・対戦・結果を持つ。ロビーは「部屋を作る」「招待コード」入力欄（上限16文字）「コードで参加」「タイトルへ」。対戦はシングルの共通ビルダー（`GameFlow.DuelTable.cs`）から卓・ダイス・役行・メタリック得点・HP・持越・結果操作を生成する。HPは572×36、自分のダイスは112px角・間隔132・y=-28、相手の公開ダイスは44px角・間隔51・y=180。共通の `GameAudio`、計算式と役の自動選択規則、保持・ドラッグ・28 Canvas単位の下フリックを使う。オンラインの通信状態だけは `VersusDuel` とスナップショットのアダプターが管理する。
+オンライン画面はロビー・対戦・結果を持つ。ロビーは「部屋を作る」、招待コード入力欄（上限16文字）、「コードで参加」、「タイトルへ」を持つ。ホストの待機中は、参加で確定した招待コードを「コードをコピー」でコピーできる。コピー後の通知は別表示で出す。対戦はシングルの共通ビルダー（`GameFlow.DuelTable.cs`）から卓・ダイス・役行・メタリック得点・HP・持越・結果操作を生成する。HPは572×36、自分のダイスは112px角・間隔132・y=-28、相手の公開ダイスは44px角・間隔51・y=180。共通の `GameAudio`、計算式と役の自動選択規則、保持・ドラッグ・28 Canvas単位の下フリックを使う。オンラインの通信状態だけは `VersusDuel` とスナップショットのアダプターが管理する。
+
+ダイスの接触から相手の HP へ抜けるまでの攻撃演出も、シングルと同じ `SharedAttackPresenter` を共有する。`Duration = 0.90` 秒の段階（`LoadingEnd` 0.12、`CollisionTime` 0.24、`HitStopEnd` 0.28、`PushEnd` 0.44、`BreakthroughEnd` 0.54、`ContactTime` 0.64、`RecoilStart` 0.70）を持ち、暗幕は 0.55、ダイスは暗幕の上（`OverlaySortOrder = 500` / `DieSortOrder = 510`）に並ぶ。控えめ設定では移動せず、接触の 0.24 秒以降に中央の静止した接触線だけを出す。単体戦と同じく、攻撃演出の `Active` は `Reset` まで真のままで、`Sample(Duration)` を一度通しただけでは終わらない。`Reset` で両手の位置・回転・拡大・Canvas・`CanvasGroup` を元へ戻す。
+
+オンラインの HP 表示は着弾の 0.64 秒から終了の 0.90 秒までの 0.26 秒で減少する。成立役と振り直しもシングルと同じ `ScoreFormationPresenter`、`RollStagger`、`RollScramble` を使う。
 
 振り直し中でも役・持越を選択し、下フリックで自分の振り直しを終了して攻撃を予約できる。相手も振り直しを終えた時点で予約した宣言を送る。右クリック／Spaceで振り直し、1〜5で保持、横ドラッグで保持をまとめて切り替える。明示的な振り直し終了ボタンは表示しない。
 

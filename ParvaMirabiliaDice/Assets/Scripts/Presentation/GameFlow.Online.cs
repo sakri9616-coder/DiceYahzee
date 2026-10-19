@@ -48,6 +48,8 @@ namespace ParvaMirabilia.Presentation
         private bool _onlineContactPlayed, _onlineOutcomePlayed;
         private ScoreHandEffectGraphic _onlineCarryEffect;
         private ScoreHandEffectGraphic _onlineImpactGraphic;
+        private SharedAttackPresenter _onlineAttackPresenter;
+        private int _onlineImpactWinner = -1;
         private float _onlineCarryEffectAge = -1;
         private ScoreHandEffectGraphic _onlineGuideGraphic;
         private Image _onlineGuideMouse, _onlineWheelMouse, _onlineContinueMouse;
@@ -59,6 +61,12 @@ namespace ParvaMirabilia.Presentation
         private int _onlineBeforeOwn, _onlineBeforeEnemy;
         private InputField _onlineCode;
         private Button _onlineCreate, _onlineJoin, _onlineRoll, _onlineSubmit, _onlineCarry;
+        // Host invite-code copy. The code is captured from the session's Joined event into a
+        // private field so the button and its copied feedback can be driven deterministically
+        // and cleared whenever the room ends.
+        private Button _onlineCopyCode;
+        private Text _onlineCopyNotice;
+        private string _onlineJoinCode = string.Empty, _onlineCopyStatus = string.Empty;
         private readonly DiceView[] _onlineMine = new DiceView[5], _onlineTheirs = new DiceView[5];
         // Cached transforms: RefreshOnline shows and hides ten dice on every snapshot and a
         // name lookup per die per refresh is more searching than the stable screen deserves.
@@ -93,6 +101,15 @@ namespace ParvaMirabilia.Presentation
             _onlineState.phase == (int)VersusPhase.Playing && !_onlineState.players[OnlineMe].rerollsFinished &&
             !_onlinePending && !_onlineStopped && !OnlineHelpOpen;
 
+        /// <summary>
+        /// True only while a created host room is still waiting for its opponent and holds a
+        /// captured nonempty invite code. Connecting, leaving, a live battle, an interruption,
+        /// or an empty code all keep the copy control hidden and inert.
+        /// </summary>
+        private bool OnlineInviteCopyAvailable => OnlineActive && !_onlineConnecting && !_onlineLeaving &&
+            _onlineSession != null && _onlineSession.IsHost && !_onlineSession.IsReady && !_onlineStopped &&
+            _onlineState == null && !string.IsNullOrEmpty(_onlineJoinCode);
+
         private void BuildOnlineEntry()
         {
             StartCoroutine(OnlineSmoke());
@@ -102,6 +119,7 @@ namespace ParvaMirabilia.Presentation
         {
             _sdTitle.gameObject.SetActive(false);
             if (_onlineRoot == null) BuildOnlineScreen();
+            if (_onlineAttackPresenter != null) _onlineAttackPresenter.Reset();
             _onlineState = null;
             _onlineDuel = null;
             _onlinePending = _onlineStopped = _onlineCarrying = false;
@@ -109,10 +127,12 @@ namespace ParvaMirabilia.Presentation
             _onlineContactPlayed = _onlineOutcomePlayed = false; _onlineChargeAge = 0;
             _onlineCommitQueued = false; _onlineWheelRemainder = 0;
             CancelOnlinePointer();
+            _onlineImpactWinner = -1;
             if (_onlineCarryEffect != null) { _onlineCarryEffect.Clear(); _onlineCarryEffect.Flush(); }
             if (_onlineImpactGraphic != null) { _onlineImpactGraphic.Clear(); _onlineImpactGraphic.Flush(); }
             SDResetOnlineScorePulses();
             SDResetOnlineChanceGlow();
+            SDResetOnlineFormation(true);
             _onlineHeld = _onlineKind = 0;
             _onlineRerollCapacity = VersusDuel.BaseRerolls; _onlineRerollRound = -1;
             _onlineSequence = _onlineRevision = 0;
@@ -121,6 +141,7 @@ namespace ParvaMirabilia.Presentation
             _onlineRematchReady[0] = _onlineRematchReady[1] = false;
             _onlineResultAge = -1; _onlineResultsRevealed = false;
             _onlineStatus.text = "オンライン対戦";
+            ClearOnlineInviteCopy();
             if (_onlineHelp != null) _onlineHelp.gameObject.SetActive(false);
             _sdRoot.gameObject.SetActive(false);
             _onlineRoot.gameObject.SetActive(true);
@@ -151,6 +172,8 @@ namespace ParvaMirabilia.Presentation
             _onlineCode.characterLimit = 16;
             _onlineCode.placeholder = UiFactory.CreateText("Placeholder", inputPanel.transform, "招待コード", 19, TextAnchor.MiddleCenter, UiFactory.TextDim, Vector2.zero, new Vector2(240, 44));
             _onlineJoin = UiFactory.CreateButton("JoinRoom", _onlineRoot, new Vector2(250, 48), new Vector2(300, 175), "コードで参加", 20, () => ConnectOnline(false));
+            _onlineCopyCode = UiFactory.CreateButton("CopyInviteCode", _onlineRoot, new Vector2(250, 44), new Vector2(0, -138), "コードをコピー", 19, CopyOnlineInviteCode);
+            _onlineCopyNotice = OnlineText("CopyNotice", "", 18, -178, DiceYahzeeVisuals.Brass);
             _onlineOwnList = UiFactory.CreateText("AvailableRoles", _onlineRoot, "", 21, TextAnchor.MiddleLeft, UiFactory.Text, new Vector2(490, -30), new Vector2(235, 330));
             _onlineEnemyList = UiFactory.CreateText("EnemyUsedRoles", _onlineRoot, "", 21, TextAnchor.MiddleLeft, UiFactory.Text, new Vector2(-490, -30), new Vector2(235, 330));
             var enemyTrack = UiFactory.CreatePanel("EnemyHpTrack", _onlineRoot, new Vector2(420, 9), new Vector2(0, 143), UiFactory.HpTrack);
@@ -210,6 +233,7 @@ namespace ParvaMirabilia.Presentation
             UiFactory.CreateButton("LeaveOnline", _onlineRoot, new Vector2(150, 36), new Vector2(510, 305), "タイトルへ", 16, LeaveOnline);
             PolishOnlineLayout();
             BuildOnlineResult();
+            SDBuildOnlineFormation();
             RefreshOnline();
         }
         private void BuildOnlineResult()
@@ -235,7 +259,7 @@ namespace ParvaMirabilia.Presentation
                 int role = k;
                 float rowY = 148 - k * 37;
                 _onlineRoles[k] = SDBuildRoleRow("Role" + k, _onlineRoot, new Vector2(SDRolePanelX, rowY), (ScoreHandKind)k,
-                    () => { if (OnlineCanChoose && !OnlineHelpOpen) { _onlineKind = role; _onlineRoleManual = true; GameAudio.Play("die_keep"); RefreshOnline(); } },
+                    () => { if (OnlineCanChoose && !OnlineHelpOpen) { _onlineKind = role; _onlineRoleManual = true; SDRefreshOnlineFormation(); GameAudio.Play("die_keep"); RefreshOnline(); } },
                     out _onlineRoleValues[k], out _onlineRoleMarkers[k]);
                 var enemy = SDBuildRoleRow("EnemyCategory" + k, _onlineRoot, new Vector2(-SDRolePanelX, rowY), (ScoreHandKind)k,
                     () => { }, out _onlineEnemyValues[k], out _onlineEnemyMarkers[k]);
@@ -286,7 +310,7 @@ namespace ParvaMirabilia.Presentation
             _onlineDrawMiracle.horizontalOverflow = HorizontalWrapMode.Overflow;
             AddOnlineTextEdge(_onlineDrawMiracle, 4f);
             _onlineDrawMiracle.gameObject.SetActive(false);
-            var help = UiFactory.CreateButton("Help", _onlineRoot, new Vector2(100, 32), new Vector2(-538, 307), "遊び方", 16, () => _onlineHelp.gameObject.SetActive(true));
+            var help = UiFactory.CreateButton("Help", _onlineRoot, new Vector2(100, 32), new Vector2(-538, 307), "遊び方", 16, () => OpenOnlineHelp());
             foreach (var button in _onlineRoot.GetComponentsInChildren<Button>(true))
                 if (!button.name.StartsWith("Role") && !button.name.StartsWith("EnemyCategory") && !button.name.Contains("Die"))
                     DiceYahzeeVisuals.StyleButton(button, button == _onlineCarry || button == _onlineRematch);
@@ -295,7 +319,7 @@ namespace ParvaMirabilia.Presentation
             dim.raycastTarget = true;
             var panel = UiFactory.CreatePanel("HelpPanel", _onlineHelp, new Vector2(650, 380), Vector2.zero, DiceYahzeeVisuals.Panel); DiceYahzeeVisuals.StylePanel(panel);
             UiFactory.CreateText("Guide", panel.transform, "オンライン対戦\n\nクリック：ダイスを保持\n右クリック：保持以外を振り直す（通常2回）\nヤッツィー成立で次のラウンドは3回\n「振り直しを終える」で残りを省略\n双方の振り直し後に出目を同時公開\nホイール／右の役：役を選ぶ\nダイスを下へドラッグして離す：役を確定\n双方の確定後に同時攻撃。持越は1度だけ。", 20, TextAnchor.MiddleCenter, DiceYahzeeVisuals.Parchment, new Vector2(0, 20), new Vector2(600, 300));
-            var close = UiFactory.CreateButton("Close", panel.transform, new Vector2(160, 38), new Vector2(0, -147), "戻る", 18, () => _onlineHelp.gameObject.SetActive(false)); DiceYahzeeVisuals.StyleButton(close);
+            var close = UiFactory.CreateButton("Close", panel.transform, new Vector2(160, 38), new Vector2(0, -147), "戻る", 18, () => CloseOnlineHelp()); DiceYahzeeVisuals.StyleButton(close);
             _onlineHelp.gameObject.SetActive(false);
         }
         private void ConfigureOnlineHp(Image fill, float y, bool own)
@@ -373,17 +397,34 @@ namespace ParvaMirabilia.Presentation
         {
             if (_onlineConnecting || _onlineLeaving || _onlineSession != null) return;
             _onlineConnecting = true; _onlineStopped = false; _onlineStatus.text = "接続中…";
+            ClearOnlineInviteCopy();
             RefreshOnline();
             var session = gameObject.AddComponent<DuelNetworkSession>();
             _onlineSession = session;
             if (_onlineSmokeMode) session.AuthenticationProfile = _onlineSmokeHost ? "dice-net-host" : "dice-net-guest";
             session.Joined += () => { if (_onlineSession == session && _onlineSmokeMode && session.IsHost) System.IO.File.WriteAllText(_onlineSmokePath, session.JoinCode); if (_onlineSession == session) _onlineStatus.text = session.IsHost ? "招待コード： " + session.JoinCode + "　相手の参加を待っています" : "対戦相手に接続中…"; };
+            session.Joined += () => { if (_onlineSession == session && session.IsHost) { _onlineJoinCode = session.JoinCode; if (OnlineActive) RefreshOnline(); } };
             session.Ready += () => { if (_onlineSession != session) return; if (session.IsHost) { _onlineDuel = new VersusDuel(FreshSeed()); _onlineDuel.Begin(); PublishOnline(); } RefreshOnline(); };
             session.CommandReceived += ReceiveOnlineCommand;
             session.SnapshotReceived += ReceiveOnlineSnapshot;
-            session.Interrupted += reason => { if (_onlineSession != session || (_onlineState != null && _onlineState.phase == (int)VersusPhase.Finished)) return; _onlineDuel?.Interrupt(); _onlineStopped = true; _onlinePending = false; _onlineStatus.text = reason; if (_onlineSmokeMode) { TraceOnlineSmoke("DICE_NET_SMOKE INTERRUPTED " + reason); Application.Quit(3); } RefreshOnline(); };
+            session.Interrupted += reason =>
+            {
+                if (_onlineSession != session || (_onlineState != null && _onlineState.phase == (int)VersusPhase.Finished)) return;
+                _onlineDuel?.Interrupt();
+                _onlineStopped = true;
+                _onlinePending = false;
+                if (_onlineAttackPresenter != null) _onlineAttackPresenter.Reset();
+                SDRefreshOnlineFormation();
+                _onlineImpactAge = -1;
+                _onlineImpactWinner = -1;
+                _onlineContactPlayed = false;
+                if (_onlineHit != null) _onlineHit.text = "";
+                _onlineStatus.text = reason;
+                if (_onlineSmokeMode) { TraceOnlineSmoke("DICE_NET_SMOKE INTERRUPTED " + reason); Application.Quit(3); }
+                RefreshOnline();
+            };
             try { if (create) await session.CreateAsync(); else await session.JoinAsync(_onlineCode.text); }
-            catch (Exception ex) { if (_onlineSession == session) { _onlineStatus.text = "接続できませんでした： " + ex.Message; if (_onlineSmokeMode) { TraceOnlineSmoke("DICE_NET_SMOKE connection failure " + ex.GetType().Name, true); Application.Quit(2); } _onlineSession = null; Destroy(session); } }
+            catch (Exception ex) { if (_onlineSession == session) { _onlineStatus.text = "接続できませんでした： " + ex.Message; ClearOnlineInviteCopy(); if (_onlineSmokeMode) { TraceOnlineSmoke("DICE_NET_SMOKE connection failure " + ex.GetType().Name, true); Application.Quit(2); } _onlineSession = null; Destroy(session); } }
             finally { _onlineConnecting = false; if (OnlineActive) RefreshOnline(); }
         }
         private async void LeaveOnline()
@@ -413,8 +454,14 @@ namespace ParvaMirabilia.Presentation
                 UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject == _onlineCode?.gameObject)
                 UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
             _onlineLeaving = true;
+            // Reset the shared overlay tree BEFORE state is cleared so no late higher-sort
+            // dim/dice linger above a lobby/result.
+            if (_onlineAttackPresenter != null) _onlineAttackPresenter.Reset();
+            _onlineImpactAge = -1; _onlineImpactWinner = -1; _onlineContactPlayed = false;
             var old = _onlineSession; _onlineSession = null;
             _onlineStopped = true; _onlineState = null; _onlineDuel = null; _onlinePending = false;
+            SDResetOnlineFormation(true);
+            ClearOnlineInviteCopy();
             RefreshOnline();
             try { if (old != null) await old.LeaveAsync(); }
             catch (Exception ex) { Debug.LogWarning("Online leave: " + ex.GetType().Name); }
@@ -434,10 +481,13 @@ namespace ParvaMirabilia.Presentation
             _onlineContactPlayed = _onlineOutcomePlayed = false; _onlineChargeAge = 0;
             _onlineCommitQueued = false; _onlineWheelRemainder = 0;
             CancelOnlinePointer();
+            if (_onlineAttackPresenter != null) _onlineAttackPresenter.Reset();
+            _onlineImpactWinner = -1;
             if (_onlineCarryEffect != null) { _onlineCarryEffect.Clear(); _onlineCarryEffect.Flush(); }
             if (_onlineImpactGraphic != null) { _onlineImpactGraphic.Clear(); _onlineImpactGraphic.Flush(); }
             SDResetOnlineScorePulses();
             SDResetOnlineChanceGlow();
+            SDResetOnlineFormation(true);
             if (_onlineHit != null) _onlineHit.text = "";
             _onlineRerollCapacity = VersusDuel.BaseRerolls; _onlineRerollRound = -1;
             _onlineReady[0] = _onlineReady[1] = false;
@@ -474,6 +524,7 @@ namespace ParvaMirabilia.Presentation
             if ((action == DuelNetworkAction.Reroll || action == DuelNetworkAction.FinishRerolls) && !OnlineRerolling) return;
             if (action == DuelNetworkAction.Submit && !OnlinePlanning) return;
             if (action == DuelNetworkAction.Continue && (_onlineState.phase != (int)VersusPhase.Resolved || _onlineState.ready[OnlineMe] || _onlineImpactAge >= 0)) return;
+            if (action == DuelNetworkAction.Reroll || action == DuelNetworkAction.FinishRerolls || action == DuelNetworkAction.Submit) SDRefreshOnlineFormation();
             _onlinePending = true;
             _onlineSession.SendCommand(new DuelNetworkCommand { Round = _onlineState.round, Sequence = ++_onlineSequence, Action = action, HeldMask = _onlineHeld, Kind = _onlineKind, Carry = _onlineCarrying, MatchGeneration = _onlineMatch });
             RefreshOnline();
@@ -528,26 +579,45 @@ namespace ParvaMirabilia.Presentation
             // match: reset per-match presentation before the impact/intro detection below reads it.
             bool freshMatch = _onlineState == null || next.match != _onlineState.match;
             if (freshMatch && _onlineState != null) ResetOnlineMatchPresentation();
-            if (_onlineState != null && _onlineState.phase == (int)VersusPhase.ChoosingRoles && (next.phase == (int)VersusPhase.Resolved || next.phase == (int)VersusPhase.Finished))
-            { _onlineBeforeOwn = _onlineState.players[OnlineMe].hp; _onlineBeforeEnemy = _onlineState.players[1 - OnlineMe].hp; _onlineImpactAge = 0; }
+            // Single local gate: true exactly on a ChoosingRoles -> Resolved/Finished transition.
+            // Capture pre-strike HP and arm the impact clock BEFORE RefreshOnline so the new
+            // snapshot cannot print the final HP ahead of the shared attack timeline.
+            bool beginImpact = _onlineImpactAge < 0 && _onlineState != null && _onlineState.phase == (int)VersusPhase.ChoosingRoles &&
+                (next.phase == (int)VersusPhase.Resolved || next.phase == (int)VersusPhase.Finished);
+            if (beginImpact)
+            {
+                _onlineBeforeOwn = _onlineState.players[OnlineMe].hp;
+                _onlineBeforeEnemy = _onlineState.players[1 - OnlineMe].hp;
+                SDRefreshOnlineFormation();
+                for (int i = 0; i < 5; i++)
+                {
+                    _onlineOwnDice[i].anchoredPosition = OnlineDieHome(i, true);
+                    _onlineEnemyDice[i].anchoredPosition = OnlineDieHome(i, false);
+                    _onlineOwnDice[i].localScale = _onlineEnemyDice[i].localScale = Vector3.one;
+                    _onlineOwnDice[i].localRotation = _onlineEnemyDice[i].localRotation = Quaternion.identity;
+                }
+                _onlineImpactAge = 0;
+                _onlineContactPlayed = false;
+            }
             if (_onlineState == null || next.round != _onlineState.round) { _onlineHeld = next.players[OnlineMe].held; _onlineCarrying = false; }
-            if (_onlineState != null && next.phase != _onlineState.phase) CancelOnlinePointer();
+            if (_onlineState != null && next.phase != _onlineState.phase) { CancelOnlinePointer(); SDRefreshOnlineFormation(); }
             bool newRound = _onlineState == null || freshMatch || next.round != _onlineState.round;
+            if (newRound) SDResetOnlineFormation(true);
             bool rerolled = !newRound && next.players[OnlineMe].rerolls < _onlineState.players[OnlineMe].rerolls;
             if ((newRound && !next.players[OnlineMe].carried) || rerolled)
             {
                 for (int i = 0; i < 5; i++)
-                    if (newRound || (_onlineHeld & (1 << i)) == 0) _onlineMine[i].BeginRoll(i * .008f, .095f);
+                    if (newRound || (_onlineHeld & (1 << i)) == 0) _onlineMine[i].BeginRoll(i * RollStagger, RollScramble);
                 GameAudio.Play("dice_roll");
             }
             if (_onlineState != null && !_onlineState.players[OnlineMe].submitted && next.players[OnlineMe].submitted) GameAudio.Play("commit");
-            if (_onlineImpactAge == 0) _onlineContactPlayed = false;
             _onlineMatch = next.match;
             for (int i = 0; i < 2; i++) _onlineRematchReady[i] = next.rematchReady != null && next.rematchReady.Length == 2 && next.rematchReady[i];
             _onlineState = next; _onlinePending = false;
             if (newRound) SelectOnlineSuggestedRole(true);
             if (!next.players[OnlineMe].submitted && next.players[OnlineMe].used[_onlineKind]) ChangeOnlineRole(1);
             RefreshOnline();
+            if (beginImpact) { SDRefreshOnlineFormation(); BeginOnlineAttack(next); }
             if (_onlineCommitQueued && next.phase == (int)VersusPhase.ChoosingRoles && !next.players[OnlineMe].submitted)
             { _onlineCommitQueued = false; SendOnline(DuelNetworkAction.Submit); }
         }
@@ -556,6 +626,7 @@ namespace ParvaMirabilia.Presentation
             if (_onlineState == null) return;
             _onlineRoleManual = true;
             for (int i = 0; i < ScoreRules.HandCount; i++) { _onlineKind = (_onlineKind + direction + ScoreRules.HandCount) % ScoreRules.HandCount; if (!_onlineState.players[OnlineMe].used[_onlineKind]) break; }
+            SDRefreshOnlineFormation();
         }
         private void RefreshOnline()
         {
@@ -573,6 +644,11 @@ namespace ParvaMirabilia.Presentation
             _onlineCreate.gameObject.SetActive(lobby); _onlineJoin.gameObject.SetActive(lobby); _onlineCode.gameObject.SetActive(lobby);
             _onlineCreate.interactable = _onlineJoin.interactable = !_onlineConnecting && !_onlineLeaving && _onlineSession == null;
             _onlineCode.interactable = !_onlineConnecting && !_onlineLeaving && _onlineSession == null;
+            bool copyAvailable = OnlineInviteCopyAvailable;
+            _onlineCopyCode.gameObject.SetActive(copyAvailable);
+            _onlineCopyCode.interactable = copyAvailable;
+            _onlineCopyNotice.text = _onlineCopyStatus;
+            _onlineCopyNotice.gameObject.SetActive(copyAvailable && !string.IsNullOrEmpty(_onlineCopyStatus));
             _onlineRoll.gameObject.SetActive(false);
             _onlineSubmit.gameObject.SetActive(false);
             _onlineCarry.gameObject.SetActive(!lobby && !finished && !_onlineState.players[OnlineMe].submitted);
@@ -667,6 +743,28 @@ namespace ParvaMirabilia.Presentation
             }
             else if (resolved) _onlineStatus.text = _onlineState.ready[OnlineMe] ? "相手を待っています" : "ROUND " + _onlineState.round.ToString("00");
             else _onlineStatus.text = "ROUND " + _onlineState.round.ToString("00") + (mine.submitted || mine.rerollsFinished && _onlineState.phase == (int)VersusPhase.Playing ? "　相手を待っています" : _onlineState.phase == (int)VersusPhase.Playing ? "　振り直し" : "　役を選択");
+        }
+        /// <summary>
+        /// Clears the captured invite code and its copied feedback. Called on a fresh lobby,
+        /// a new connection attempt, a failed creation, and any leave so a stale room can never
+        /// be copied after it is gone.
+        /// </summary>
+        private void ClearOnlineInviteCopy()
+        {
+            _onlineJoinCode = string.Empty;
+            _onlineCopyStatus = string.Empty;
+        }
+        /// <summary>
+        /// Writes the host room's own invite code to the system clipboard. It never copies the
+        /// lobby status prose or the typed join field, and reports the copy without replacing the
+        /// invite code / waiting line.
+        /// </summary>
+        private void CopyOnlineInviteCode()
+        {
+            if (!OnlineInviteCopyAvailable) return;
+            GUIUtility.systemCopyBuffer = _onlineJoinCode;
+            _onlineCopyStatus = "招待コードをコピーしました";
+            RefreshOnline();
         }
         /// <summary>
         /// Draws one pip per reroll the round offers: 2 normally, 3 after a formed Yahtzee.
@@ -838,11 +936,47 @@ namespace ParvaMirabilia.Presentation
             }
             TraceOnlineSmoke("DICE_NET_SMOKE did not complete", true); Application.Quit(2);
         }
+        private void OpenOnlineHelp()
+        {
+            CancelOnlinePointer();
+            if (_onlineAttackPresenter != null) _onlineAttackPresenter.Reset();
+            SDRefreshOnlineFormation();
+            _onlineImpactWinner = -1;
+            if (_onlineHit != null) _onlineHit.text = "";
+            _onlineHelp.gameObject.SetActive(true);
+        }
+        private void CloseOnlineHelp()
+        {
+            SDRefreshOnlineFormation();
+            _onlineHelp.gameObject.SetActive(false);
+            RefreshOnline();
+            UpdateOnlineGuide();
+        }
+        private void TickOnlineImpactUnderModal()
+        {
+            if (_onlineImpactAge < 0) return;
+            _onlineImpactAge += Time.unscaledDeltaTime;
+            if (_onlineImpactAge < SharedAttackPresenter.Duration) return;
+            _onlineImpactAge = -1;
+            _onlineImpactWinner = -1;
+            _onlineContactPlayed = false;
+            if (_onlineAttackPresenter != null) _onlineAttackPresenter.Reset();
+            RefreshOnline();
+        }
         private void UpdateOnline()
         {
-            if (OnlineHelpOpen) { CancelOnlinePointer(); return; }
+            if (OnlineHelpOpen)
+            {
+                CancelOnlinePointer();
+                if (_onlineAttackPresenter != null) _onlineAttackPresenter.Reset();
+                _onlineImpactWinner = -1;
+                TickOnlineImpactUnderModal();
+                return;
+            }
             bool rolling = OnlineRolling;
-            foreach (var die in _onlineMine) die?.Tick(Time.unscaledDeltaTime);
+            bool attackActive = _onlineAttackPresenter != null && _onlineAttackPresenter.Active;
+            if (!attackActive)
+                foreach (var die in _onlineMine) die?.Tick(Time.unscaledDeltaTime);
             if (rolling && !OnlineRolling) { SelectOnlineSuggestedRole(false); RefreshOnline(); }
             UpdateOnlineImpact(); TickOnlineResult(); UpdateOnlineCarryEffect(); UpdateOnlineGuide();
             SDTickOnlineScorePulses(Time.unscaledDeltaTime);
@@ -859,11 +993,13 @@ namespace ParvaMirabilia.Presentation
                 for (int i = 0; i < 5; i++) if (OnlineRerolling && Input.GetKeyDown(KeyCode.Alpha1 + i)) { _onlineHeld ^= 1 << i; GameAudio.Play("die_keep"); RefreshOnline(); }
                 if (Input.GetKeyDown(KeyCode.Return)) CommitOnlineHand();
             }
+            SDTickOnlineFormation(Time.unscaledDeltaTime);
         }
 
         private void UpdateOnlineWaitingDice()
         {
             if (_onlineImpactAge >= 0 || _onlineState == null || OnlineRolling) return;
+            if (_onlineAttackPresenter != null && _onlineAttackPresenter.Active) return;
             bool roles = _onlineState.phase == (int)VersusPhase.ChoosingRoles || _onlineState.phase == (int)VersusPhase.Playing;
             bool mineWaiting = roles && (_onlineState.players[OnlineMe].submitted || _onlineCommitQueued || _onlineAiming);
             bool theirsWaiting = roles && _onlineState.players[1 - OnlineMe].submitted;
@@ -881,59 +1017,76 @@ namespace ParvaMirabilia.Presentation
             }
         }
 
+        /// <summary>
+        /// Fires once when the ChoosingRoles竊坦esolved transition first lands, so the shared
+        /// presenter captures the resting die transforms before any impact refresh overwrites
+        /// them. Repeated snapshots while the impact is running leave this alone.
+        /// </summary>
+        private void BeginOnlineAttack(OnlineState state)
+        {
+            if (_onlineAttackPresenter == null) _onlineAttackPresenter = new SharedAttackPresenter(_onlineRoot);
+            else _onlineAttackPresenter.Reset();
+            _onlineImpactWinner = -1;
+            if (state == null || state.players == null) return;
+            var mine = state.players[OnlineMe];
+            var enemy = state.players[1 - OnlineMe];
+            int ownRaw = mine.score;
+            int enemyRaw = enemy.score;
+            int ownAttack = ownRaw;
+            int enemyAttack = enemyRaw;
+            bool ownChance = mine.kind == (int)ScoreHandKind.Chance;
+            bool enemyChance = enemy.kind == (int)ScoreHandKind.Chance;
+            if (ownChance != enemyChance) { int swap = ownAttack; ownAttack = enemyAttack; enemyAttack = swap; }
+            // Strength comes from the same raw own/enemy score 50/100/130 bins the single-score
+            // adapter uses, NOT cumulative HP loss, so identical rounds punch identically.
+            int score = Mathf.Max(ownRaw, enemyRaw);
+            int tier = score < 50 ? 0 : score < 100 ? 1 : score < 130 ? 2 : 3;
+            Vector2 ownTarget = OnlineHpTarget(_onlineOwnHpFill);
+            Vector2 enemyTarget = OnlineHpTarget(_onlineEnemyHpFill);
+            _onlineAttackPresenter.Begin(_onlineOwnDice, _onlineEnemyDice, ownAttack, enemyAttack, ownTarget, enemyTarget, _sdReducedMotion, tier);
+            _onlineImpactWinner = _onlineAttackPresenter.Winner;
+        }
+
+        private Vector2 OnlineHpTarget(Image fill)
+        {
+            if (fill == null || _onlineRoot == null) return Vector2.zero;
+            // The full track center is stable; the colored fill's midpoint moves with HP anchors.
+            RectTransform track = fill.transform.parent as RectTransform;
+            RectTransform source = track != null ? track : fill.rectTransform;
+            Vector3 world = source.TransformPoint(source.rect.center);
+            return _onlineRoot.InverseTransformPoint(world);
+        }
+
         private void UpdateOnlineImpact()
         {
             if (_onlineImpactAge < 0 || _onlineState == null) return;
             _onlineImpactAge += Time.unscaledDeltaTime;
-            int ownDamage = _onlineState.damage[OnlineMe], enemyDamage = _onlineState.damage[1 - OnlineMe];
-            int damage = Mathf.Max(ownDamage, enemyDamage);
-            int tier = damage < 30 ? 0 : damage < 50 ? 1 : damage < 80 ? 2 : 3;
-            // Even the quietest tier reaches visible contact between the two hands.
-            float launch = _sdReducedMotion ? 0 : Mathf.Sin(Mathf.Clamp01(_onlineImpactAge / .52f) * Mathf.PI) * (76 + tier * 20);
-            for (int i = 0; i < 5; i++)
+            if (_onlineAttackPresenter == null) _onlineAttackPresenter = new SharedAttackPresenter(_onlineRoot);
+            _onlineAttackPresenter.Sample(_onlineImpactAge);
+            int ownDamage = _onlineState.damage != null ? _onlineState.damage[OnlineMe] : 0;
+            int enemyDamage = _onlineState.damage != null ? _onlineState.damage[1 - OnlineMe] : 0;
+            // Audio fires once at the exact .64s contact of the shared timeline. HP drain also
+            // begins there so nothing changes before the strike visibly lands.
+            float drainT = Mathf.Clamp01((_onlineImpactAge - SharedAttackPresenter.ContactTime) /
+                Mathf.Max(0.01f, SharedAttackPresenter.Duration - SharedAttackPresenter.ContactTime));
+            if (!_onlineContactPlayed && _onlineImpactAge >= SharedAttackPresenter.ContactTime)
             {
-                _onlineMine[i].SetPosition(OnlineDieHome(i, true) + Vector2.up * launch);
-                _onlineTheirs[i].SetPosition(OnlineDieHome(i, false) + Vector2.down * launch);
+                _onlineContactPlayed = true;
+                GameAudio.Play(SDImpactSound(enemyDamage, ownDamage));
             }
-            float t = Mathf.SmoothStep(0, 1, Mathf.Clamp01((_onlineImpactAge - SDImpactContactDelay) / .6f));
-            if (!_onlineContactPlayed && _onlineImpactAge >= SDImpactContactDelay)
-            { _onlineContactPlayed = true; GameAudio.Play(SDImpactSound(enemyDamage, ownDamage)); }
-            float ownHp = Mathf.Lerp(_onlineBeforeOwn, _onlineState.players[OnlineMe].hp, t);
-            float enemyHp = Mathf.Lerp(_onlineBeforeEnemy, _onlineState.players[1 - OnlineMe].hp, t);
-            SDSetTableHp(_onlineOwnHpFill, ownHp, ScoreDuel.StartingHp);
-            SDSetTableHp(_onlineEnemyHpFill, enemyHp, ScoreDuel.StartingHp);
-            SDAnimateHpLoss(_onlineOwnHpFill, _onlineOwnLoss, _onlineBeforeOwn, _onlineState.players[OnlineMe].hp, ScoreDuel.StartingHp, SDPlayerColor, 1-t);
-            SDAnimateHpLoss(_onlineEnemyHpFill, _onlineEnemyLoss, _onlineBeforeEnemy, _onlineState.players[1-OnlineMe].hp, ScoreDuel.StartingHp, SDEnemyColor, 1-t);
-            // The drain keeps naming the round's own damage while the bar catches up with it.
-            _onlineOwnDamageShown = _onlineState.damage != null ? Mathf.Max(0, _onlineState.damage[OnlineMe]) : 0;
-            _onlineEnemyDamageShown = _onlineState.damage != null ? Mathf.Max(0, _onlineState.damage[1 - OnlineMe]) : 0;
-            SDSetOnlineHpLines(Mathf.RoundToInt(ownHp), Mathf.RoundToInt(enemyHp));
-            _onlineImpactGraphic.Clear();
-            if (!_sdReducedMotion && _onlineImpactAge < 1.1f)
+            if (_onlineImpactAge >= SharedAttackPresenter.ContactTime)
             {
-                float burst = Mathf.Sin(Mathf.Clamp01((_onlineImpactAge - .12f) / .98f) * Mathf.PI);
-                Vector2 center = new Vector2(0, 27);
-                Color flash = DiceYahzeeVisuals.Brass;
-                flash.a = burst * (.76f + tier * .06f);
-                float radius = (83 + tier * 25) * (.76f + burst * .32f);
-                _onlineImpactGraphic.Ring(center, radius, 3.5f + tier * 1.1f, flash, 48);
-                int rays = 10 + tier * 6;
-                for (int i = 0; i < rays; i++)
-                {
-                    float angle = i * Mathf.PI * 2f / rays + .15f;
-                    Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
-                    float near = 68 + tier * 15;
-                    float far = near + (32 + tier * 18) * burst;
-                    _onlineImpactGraphic.Line(center + direction * near, center + direction * far,
-                        3.1f + tier * 1.0f, flash);
-                }
-                if (tier >= 1)
-                {
-                    Color echo = flash; echo.a *= .55f;
-                    _onlineImpactGraphic.Ring(center, radius * 1.28f, 2.0f + tier * .5f, echo, 48);
-                }
+                float eased = 1f - (1f - drainT) * (1f - drainT);
+                float ownHp = Mathf.Lerp(_onlineBeforeOwn, _onlineState.players[OnlineMe].hp, eased);
+                float enemyHp = Mathf.Lerp(_onlineBeforeEnemy, _onlineState.players[1 - OnlineMe].hp, eased);
+                SDSetTableHp(_onlineOwnHpFill, ownHp, ScoreDuel.StartingHp);
+                SDSetTableHp(_onlineEnemyHpFill, enemyHp, ScoreDuel.StartingHp);
+                SDAnimateHpLoss(_onlineOwnHpFill, _onlineOwnLoss, _onlineBeforeOwn, _onlineState.players[OnlineMe].hp, ScoreDuel.StartingHp, SDPlayerColor, 1f - drainT);
+                SDAnimateHpLoss(_onlineEnemyHpFill, _onlineEnemyLoss, _onlineBeforeEnemy, _onlineState.players[1 - OnlineMe].hp, ScoreDuel.StartingHp, SDEnemyColor, 1f - drainT);
+                _onlineOwnDamageShown = Mathf.Max(0, ownDamage);
+                _onlineEnemyDamageShown = Mathf.Max(0, enemyDamage);
+                SDSetOnlineHpLines(Mathf.RoundToInt(ownHp), Mathf.RoundToInt(enemyHp));
             }
-            _onlineImpactGraphic.Flush();
             if (_onlineSmokeMode && !_onlineSmokeImpactCaptured && _onlineState.round == 1 &&
                 _onlineImpactAge > .38f && SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null)
             {
@@ -941,12 +1094,14 @@ namespace ParvaMirabilia.Presentation
                 SmokeCapture((_onlineSmokeHost ? "host" : "guest") + "-online-impact");
             }
             _onlineHit.text = "";
-            if (_onlineImpactAge > 1.55f)
+            if (_onlineImpactAge >= SharedAttackPresenter.Duration)
             {
                 _onlineImpactAge = -1; _onlineHit.text = "";
+                // Retain the reusable presenter tree; only Reset so the next attack can reuse it.
+                if (_onlineAttackPresenter != null) { _onlineAttackPresenter.Reset(); }
+                _onlineImpactWinner = -1;
                 for (int i = 0; i < 5; i++)
                 {
-                    _onlineMine[i].SetPosition(OnlineDieHome(i, true)); _onlineTheirs[i].SetPosition(OnlineDieHome(i, false));
                     _onlineOwnDice[i].localScale = _onlineEnemyDice[i].localScale = Vector3.one;
                     _onlineOwnDice[i].localRotation = _onlineEnemyDice[i].localRotation = Quaternion.identity;
                 }

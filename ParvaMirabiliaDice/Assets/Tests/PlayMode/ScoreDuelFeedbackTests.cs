@@ -970,123 +970,164 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(Read<Text>("_sdNpcFormula").fontSize, Is.LessThan(Read<Text>("_sdNpcScoreNumber").fontSize));            yield return null;
         }
 
-        [UnityTest] public IEnumerator FourOutgoingDamageTiersDrawDifferentContactGeometry_AndRecoverOriginalDice()
+        [UnityTest] public IEnumerator SharedAttackPresenterSignsRealHands_PushesTheWinnerToTheHpBar_AndStrikesAtContact()
         {
             PullToFire();
+            Assert.That(AttackPresenter, Is.Not.Null, "a committed clash builds the shared attack presenter");
+            Assert.That(PresenterConstant("ContactTime"), Is.EqualTo(.64f).Within(.0001f),
+                "the shared strike is authored at .64");
+            Assert.That(PresenterConstant("CollisionTime"), Is.EqualTo(.24f).Within(.0001f),
+                "the shared collision is authored at .24");
+            Assert.That(PresenterConstant("CollisionTime"), Is.Not.EqualTo(PresenterConstant("ContactTime")),
+                "the collision beat and the strike are separate phases");
+
             var round = Engine.LastRound;
-            var damageProperty = typeof(ScoreRound).GetProperty("DamageToNpc");
-            var incomingProperty = typeof(ScoreRound).GetProperty("DamageToPlayer");
-            int originalDamage = round.DamageToNpc, originalIncoming = round.DamageToPlayer;
-            int[] damages = { 20, 40, 65, 100 };
-            int previousStrokeCount = 0;
-            var shapes = new System.Collections.Generic.HashSet<string>();
-            string weakestGeometry = null;
-            Vector2[] homes = DiceHomes();
-            Call("SDResetImpactPresentation");
-            homes = DiceHomes();
+            var ownKind = typeof(ScoreRound).GetProperty("PlayerKind");
+            var enemyKind = typeof(ScoreRound).GetProperty("NpcKind");
+            var ownScore = typeof(ScoreRound).GetProperty("PlayerScore");
+            var enemyScore = typeof(ScoreRound).GetProperty("NpcScore");
+            var savedOwnKind = (ScoreHandKind)ownKind.GetValue(round);
+            var savedEnemyKind = (ScoreHandKind)enemyKind.GetValue(round);
+            int savedOwnScore = (int)ownScore.GetValue(round), savedEnemyScore = (int)enemyScore.GetValue(round);
+            int savedOutgoing = round.DamageToNpc, savedIncoming = round.DamageToPlayer;
+            int[] ownAttacks = { 90, 40, 60 }, enemyAttacks = { 40, 90, 60 };
             try
             {
-                for (int tier = 0; tier < 4; tier++)
+                // A neutral, non-Chance pair isolates the signed comparison the presenter steers by.
+                ownKind.SetValue(round, ScoreHandKind.Pair);
+                enemyKind.SetValue(round, ScoreHandKind.Pair);
+                for (int scenario = 0; scenario < ownAttacks.Length; scenario++)
                 {
+                    ownScore.SetValue(round, ownAttacks[scenario]);
+                    enemyScore.SetValue(round, enemyAttacks[scenario]);
                     Call("SDResetImpactPresentation");
-                    damageProperty.SetValue(round, damages[tier]);
-                    // The impact tier follows the larger of the two sides, so a neutral
-                    // incoming value isolates each outgoing tier on its own.
-                    incomingProperty.SetValue(round, 0);
                     Call("SDStartAttackMotion");
-                    Assert.That(Read<int>("_sdImpactTier"), Is.EqualTo(tier));
-                    // Pin the launch punch so the mid-flight position stays above the asserted
-                    // line no matter what score the real committed hand happened to carry.
-                    Write("_sdImpactPunch", 1);
-                    Write("_sdAttackAge", .26f); Call("SDAnimateImpactPresentation");
-                    Assert.That(Read<Text>("_sdImpactCounter").text, Is.Empty, "damage waits for contact");
-                    Assert.That(Read<bool>("_sdImpactContact"), Is.False);
-                    Assert.That(Die(2).anchoredPosition.y, Is.GreaterThan(homes[2].y + 100), "rendered dice fly toward the opponent");
-                    Write("_sdAttackAge", .36f); Call("SDAnimateImpactPresentation");
-                    Assert.That(Read<bool>("_sdImpactContact"), Is.True);
-                    var geometry = Read<Graphic>("_sdImpactGeometry");
-                    int count = (int)geometry.GetType().GetField("_count", Private).GetValue(geometry);
-                    Assert.That(count, Is.GreaterThan(previousStrokeCount), "stronger impacts draw more geometry"); previousStrokeCount = count;
-                    string tierGeometry = GraphicGeometry(geometry);
-                    if (tier == 0) weakestGeometry = tierGeometry;
-                    Assert.That(shapes.Add(tierGeometry), Is.True, "every tier produces different rendered geometry");
-                    Assert.That(Read<Text>("_sdImpactCounter").text, Is.Empty, "damage is displayed at the HP bar instead of scattering");
-                    Assert.That(Read<Text>("_sdImpactIncomingCounter").text, Is.Empty);
-                    Call("SDTickAttackMotion", 1f);
-                    AssertHomes(homes); AssertBaseScales();
-                    Assert.That(Read<float>("_sdAttackAge"), Is.LessThan(0));
-                    Assert.That(Read<Text>("_sdImpactCounter").text, Is.Empty);
-                }
+                    var presenter = AttackPresenter;
+                    int expected = ownAttacks[scenario] > enemyAttacks[scenario] ? 0 :
+                        enemyAttacks[scenario] > ownAttacks[scenario] ? 1 : -1;
+                    Assert.That(PresenterRead<bool>(presenter, "Active"), Is.True);
+                    Assert.That(PresenterRead<int>(presenter, "Winner"), Is.EqualTo(expected),
+                        "scenario " + scenario + " signs the winner from the real attacking scores");
 
-                // A light outgoing hit paired with a heavy incoming one must reach the top
-                // tier and draw the strong contact shape rather than the weak 20-damage one.
-                Assert.That(weakestGeometry, Is.Not.Null);
-                Call("SDResetImpactPresentation");
-                damageProperty.SetValue(round, damages[0]);
-                incomingProperty.SetValue(round, 120);
-                Call("SDStartAttackMotion");
-                Assert.That(Read<int>("_sdImpactTier"), Is.EqualTo(3),
-                    "20 outgoing with 120 incoming must reach the top impact tier");
-                Write("_sdAttackAge", .36f); Call("SDAnimateImpactPresentation");
-                Assert.That(Read<bool>("_sdImpactContact"), Is.True);
-                Assert.That(GraphicGeometry(Read<Graphic>("_sdImpactGeometry")), Is.Not.EqualTo(weakestGeometry),
-                    "the heavy incoming hit draws the strong contact geometry, not the weak outgoing shape");
+                    // Collision at .24: the rows have met, but no strike has landed yet.
+                    Write("_sdAttackAge", PresenterConstant("CollisionTime")); Call("SDAnimateImpactPresentation");
+                    Assert.That(Read<bool>("_sdImpactContact"), Is.False, "the .24 collision is not the strike");
+                    Assert.That(PresenterRead<bool>(presenter, "HasStruck"), Is.False);
+
+                    // Contact at .64: both real hands grow to the shared display size...
+                    Write("_sdAttackAge", PresenterConstant("ContactTime")); Call("SDAnimateImpactPresentation");
+                    Assert.That(PresenterRead<bool>(presenter, "HasStruck"), Is.True, "the strike lands at .64");
+                    Assert.That(Read<bool>("_sdImpactContact"), Is.True);
+                    var own = Read<RectTransform[]>("_sdFxDice");
+                    var npc = Read<RectTransform[]>("_sdNpcDieTransforms");
+                    for (int i = 0; i < 5; i++)
+                    {
+                        Assert.That(LocalHeight(own[i]), Is.EqualTo(60f).Within(2f), "own die " + i + " is normalized at contact");
+                        Assert.That(LocalHeight(npc[i]), Is.EqualTo(60f).Within(2f), "enemy die " + i + " is normalized at contact");
+                    }
+                    // ...and the winner crosses the table to the loser's health bar.
+                    if (expected == 0)
+                        Assert.That(Vector2.Distance(HandCenter(own), BarCenter(Read<Image>("_sdNpcBar"))), Is.LessThan(2f),
+                            "own win drives the five real dice onto the enemy health bar");
+                    else if (expected == 1)
+                        Assert.That(Vector2.Distance(HandCenter(npc), BarCenter(Read<Image>("_sdPlayerBar"))), Is.LessThan(2f),
+                            "an incoming win reverses the push onto the own health bar");
+                    else
+                    {
+                        Assert.That(Vector2.Distance(HandCenter(own), HandCenter(npc)), Is.GreaterThan(60f),
+                            "a tie splits the two rows apart instead of pushing either");
+                        Assert.That(((Image)PresenterField(presenter, "_impactFlash")).gameObject.activeSelf, Is.False,
+                            "a tie never flashes a false impact");
+                    }
+                    var dim = PresenterRead<Image>(presenter, "Dim");
+                    Assert.That(dim.raycastTarget, Is.False, "the dim backdrop must stay input transparent");
+                    Assert.That(dim.color.a, Is.GreaterThan(0f), "the dim is genuinely drawn behind the clash");
+                    Assert.That(round.DamageToNpc, Is.EqualTo(savedOutgoing), "the presentation never rewrites the outgoing damage");
+                    Assert.That(round.DamageToPlayer, Is.EqualTo(savedIncoming), "the presentation never rewrites the incoming damage");
+                }
             }
             finally
             {
-                damageProperty.SetValue(round, originalDamage);
-                incomingProperty.SetValue(round, originalIncoming);
+                ownKind.SetValue(round, savedOwnKind);
+                enemyKind.SetValue(round, savedEnemyKind);
+                ownScore.SetValue(round, savedOwnScore);
+                enemyScore.SetValue(round, savedEnemyScore);
                 Call("SDResetImpactPresentation");
             }
             yield return null;
         }
 
-        [UnityTest] public IEnumerator TheLaunchCocksBackThenWhipsAndTheBigScoresShakeTheTable()
+        [UnityTest] public IEnumerator SharedAttackPresenterResetsExactPoses_KeepsTheDimTransparent_AndHoldsReducedMotionStill()
         {
             PullToFire();
-            var round = Engine.LastRound;
-            var scoreProperty = typeof(ScoreRound).GetProperty("PlayerScore");
-            var npcScoreProperty = typeof(ScoreRound).GetProperty("NpcScore");
-            int originalScore = round.PlayerScore, originalNpcScore = round.NpcScore;
-            try
+            var presenter = AttackPresenter;
+            Assert.That(presenter, Is.Not.Null);
+            var own = Read<RectTransform[]>("_sdFxDice");
+            var npc = Read<RectTransform[]>("_sdNpcDieTransforms");
+            var ownSource = Snapshot(own);
+            var npcSource = Snapshot(npc);
+            int coreOutgoing = Engine.LastRound.DamageToNpc, coreIncoming = Engine.LastRound.DamageToPlayer;
+            Assert.That(PresenterRead<Image>(presenter, "Dim").raycastTarget, Is.False,
+                "the dim backdrop never intercepts the pointer");
+
+            // A real mid-clash sample genuinely moves the standing dice...
+            Write("_sdAttackAge", PresenterConstant("ContactTime")); Call("SDAnimateImpactPresentation");
+            Assert.That(Vector3.Distance(own[0].localPosition, ownSource[0].Position), Is.GreaterThan(1f),
+                "the fixture is genuinely mid-clash");
+
+            // ...and Reset restores every one of the ten real dice to its captured source pose.
+            Call("SDResetImpactPresentation");
+            AssertSnapshots(ownSource, own, "own");
+            AssertSnapshots(npcSource, npc, "enemy");
+            Assert.That(PresenterRead<bool>(presenter, "Active"), Is.False);
+            Assert.That(PresenterRead<float>(presenter, "Age"), Is.Zero);
+            Assert.That(PresenterRead<int>(presenter, "Winner"), Is.EqualTo(-1));
+            Assert.That(PresenterRead<Image>(presenter, "Dim").color.a, Is.Zero, "Reset clears the dim");
+            var overlay = (Canvas)PresenterField(presenter, "_overlay");
+            Assert.That(overlay == null || !overlay.enabled, "Reset hides the overlay canvas");
+            Assert.That(((Image)PresenterField(presenter, "_contactCue")).gameObject.activeSelf, Is.False, "Reset hides the contact cue");
+            Assert.That(((Image)PresenterField(presenter, "_impactFlash")).gameObject.activeSelf, Is.False, "Reset hides the impact flash");
+
+            // The damage bar waits for the strike at the shared contact time; the receipt is untouched.
+            float barBefore = Read<float>("_sdNpcHpShown");
+            Write("_sdPlayerHpFrom", Engine.PlayerHp + 12f);
+            Write("_sdNpcHpFrom", Engine.NpcHp + 12f);
+            Write("_sdHpAge", 0f);
+            Write("_sdSmokeAttackAgeOverride", PresenterConstant("CollisionTime"));
+            Call("SDStartAttackMotion");
+            yield return null; Canvas.ForceUpdateCanvases();
+            Assert.That(Read<float>("_sdNpcHpShown"), Is.EqualTo(barBefore).Within(.001f),
+                "the collision leaves the damage bar untouched");
+            Write("_sdSmokeAttackAgeOverride", PresenterConstant("ContactTime"));
+            yield return null; Canvas.ForceUpdateCanvases();
+            Assert.That(Read<float>("_sdNpcHpShown"), Is.Not.EqualTo(barBefore).Within(.001f),
+                "the strike begins the damage bar drop");
+            Assert.That(Read<float>("_sdNpcHpShown"), Is.LessThan(Engine.NpcHp + 12f),
+                "the bar moves down from the pre-clash value");
+            Assert.That(Engine.LastRound.DamageToNpc, Is.EqualTo(coreOutgoing),
+                "the strike never rewrites the receipt's outgoing damage");
+            Assert.That(Engine.LastRound.DamageToPlayer, Is.EqualTo(coreIncoming),
+                "the strike never rewrites the receipt's incoming damage");
+
+            Write("_sdSmokeAttackAgeOverride", null);
+            Call("SDResetImpactPresentation");
+            yield return null;
+
+            // Reduced motion keeps the source poses exactly still under one steady dim.
+            bool motion = Read<bool>("_sdReducedMotion");
+            Write("_sdReducedMotion", true);
+            Call("SDStartAttackMotion");
+            foreach (float age in new[] { 0f, PresenterConstant("CollisionTime"), PresenterConstant("ContactTime"), .82f })
             {
-                scoreProperty.SetValue(round, 70); npcScoreProperty.SetValue(round, 60);
-                Call("SDResetImpactPresentation");
-                Call("SDStartAttackMotion");
-                // Reading the homes here, right after the reset, so they are the standing
-                // positions - before the reset they still carry the flick's pull.
-                Vector2[] homes = DiceHomes();
-                // The wind-up punches below the origin, which a single glide curve never does.
-                Write("_sdAttackAge", .05f); Call("SDAnimateImpactPresentation");
-                Assert.That(Die(2).anchoredPosition.y, Is.LessThan(homes[2].y - 6f),
-                    "the launch rears back before it flies");
-                Assert.That(Root("_sdBattle").anchoredPosition, Is.EqualTo(Vector2.zero),
-                    "a modest clash never shakes the table");
-                // The whip keeps its crest: the two hundredths before contact still cover a
-                // third of the flight, so the strike does not decelerate into the enemy.
-                Write("_sdAttackAge", .28f); Call("SDAnimateImpactPresentation");
-                float crest = Die(2).anchoredPosition.y;
-                Write("_sdAttackAge", .299f); Call("SDAnimateImpactPresentation");
-                Assert.That(Die(2).anchoredPosition.y - crest, Is.GreaterThan(20f),
-                    "the launch arrives at speed instead of gliding to a stop");
-                // From 100 points up the table itself shakes, on the same explicit age, and
-                // decays back to the untouched origin inside the presentation window.
-                scoreProperty.SetValue(round, 150);
-                Call("SDStartAttackMotion");
-                Write("_sdAttackAge", .32f); Call("SDAnimateImpactPresentation");
-                Vector2 shaken = Root("_sdBattle").anchoredPosition;
-                Assert.That(shaken.sqrMagnitude, Is.GreaterThan(1f),
-                    "a 150-point clash shakes the table on landing");
-                Write("_sdAttackAge", .80f); Call("SDAnimateImpactPresentation");
-                Assert.That(Root("_sdBattle").anchoredPosition, Is.EqualTo(Vector2.zero),
-                    "the shake decays back to the untouched origin before the presentation ends");
+                Write("_sdAttackAge", age); Call("SDAnimateImpactPresentation");
+                Assert.That(PresenterRead<bool>(presenter, "Active"), Is.True);
+                AssertSnapshots(ownSource, own, "reduced own at " + age);
+                AssertSnapshots(npcSource, npc, "reduced enemy at " + age);
+                Assert.That(PresenterRead<Image>(presenter, "Dim").color.a, Is.EqualTo(.55f).Within(.0001f),
+                    "reduced motion holds a steady dim");
             }
-            finally
-            {
-                scoreProperty.SetValue(round, originalScore);
-                npcScoreProperty.SetValue(round, originalNpcScore);
-                Call("SDResetImpactPresentation");
-            }
+            Write("_sdReducedMotion", motion);
+            Call("SDResetImpactPresentation");
             yield return null;
         }
 
@@ -1290,6 +1331,60 @@ namespace ParvaMirabilia.Quality.Tests
             var corners = new Vector3[4];
             rect.GetWorldCorners(corners);
             return Vector3.Distance(corners[0], corners[1]);
+        }
+        private object AttackPresenter => Read<object>("_sdAttackPresenter");
+        private static T PresenterRead<T>(object presenter, string name) =>
+            (T)presenter.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public).GetValue(presenter);
+        private static object PresenterField(object presenter, string name) =>
+            presenter.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(presenter);
+        private static float PresenterConstant(string name) =>
+            (float)typeof(GameFlow).Assembly.GetType("ParvaMirabilia.Presentation.SharedAttackPresenter")
+                .GetField(name, BindingFlags.Public | BindingFlags.Static).GetValue(null);
+        private struct TransformSnapshot { public Vector3 Position; public Vector3 Scale; public Quaternion Rotation; }
+        private TransformSnapshot[] Snapshot(RectTransform[] hand)
+        {
+            var snapshots = new TransformSnapshot[hand.Length];
+            for (int i = 0; i < hand.Length; i++)
+                snapshots[i] = new TransformSnapshot
+                {
+                    Position = hand[i].localPosition, Scale = hand[i].localScale, Rotation = hand[i].localRotation
+                };
+            return snapshots;
+        }
+        private void AssertSnapshots(TransformSnapshot[] expected, RectTransform[] hand, string label)
+        {
+            for (int i = 0; i < hand.Length; i++)
+            {
+                Assert.That(Vector3.Distance(expected[i].Position, hand[i].localPosition), Is.LessThan(.0001f), label + " die " + i + " position");
+                Assert.That(Vector3.Distance(expected[i].Scale, hand[i].localScale), Is.LessThan(.0001f), label + " die " + i + " scale");
+                Assert.That(Quaternion.Angle(expected[i].Rotation, hand[i].localRotation), Is.LessThan(.01f), label + " die " + i + " rotation");
+            }
+        }
+        private Vector2 HandCenter(RectTransform[] hand)
+        {
+            Vector2 sum = Vector2.zero;
+            for (int i = 0; i < hand.Length; i++)
+                sum += (Vector2)Root("_sdBattle").InverseTransformPoint(hand[i].TransformPoint(hand[i].rect.center));
+            return sum / hand.Length;
+        }
+        private Vector2 BarCenter(Image fill)
+        {
+            RectTransform track = fill.transform.parent as RectTransform;
+            RectTransform source = track != null ? track : fill.rectTransform;
+            return Root("_sdBattle").InverseTransformPoint(source.TransformPoint(source.rect.center));
+        }
+        private float LocalHeight(RectTransform rect)
+        {
+            var corners = new Vector3[4];
+            rect.GetWorldCorners(corners);
+            float min = float.PositiveInfinity, max = float.NegativeInfinity;
+            for (int i = 0; i < 4; i++)
+            {
+                float y = Root("_sdBattle").InverseTransformPoint(corners[i]).y;
+                min = Mathf.Min(min, y);
+                max = Mathf.Max(max, y);
+            }
+            return max - min;
         }
         private void ApplyVisualFixture(int[] faces)
         {

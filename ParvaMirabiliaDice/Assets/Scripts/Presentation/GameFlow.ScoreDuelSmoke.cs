@@ -403,30 +403,82 @@ namespace ParvaMirabilia.Presentation
             SmokeCheck(!_sdSaveButton.interactable, "saving is unavailable after its one use");
             SmokeCapture("saved-return");
 
-            // Opt-in visual fixtures retain a real receipt, then replace only its displayed
-            // damage for four deterministic presentation samples. The receipt is restored.
+            // The committed clash is the shared attack presenter now. The receipt steers the
+            // winner and the score bands, so it is borrowed, forced through the three signed
+            // outcomes, then restored; the presentation never mutates it. Each canonical phase
+            // is frozen with the smoke-only age override so the render boundary cannot advance it.
             var impactReceipt = _sdEngine.LastRound;
             int outgoingDamage = impactReceipt.DamageToNpc, incomingDamage = impactReceipt.DamageToPlayer;
+            ScoreHandKind receiptOwnKind = impactReceipt.PlayerKind, receiptEnemyKind = impactReceipt.NpcKind;
+            int receiptOwnScore = impactReceipt.PlayerScore, receiptEnemyScore = impactReceipt.NpcScore;
             bool impactWasCommitted = _sdCommitted; _sdCommitted = true;
-            int[] impactDamages = { 20, 40, 65, 100 };
-            for (int tier = 0; tier < 4; tier++)
+            float savedAttackAge = _sdAttackAge;
+            float? savedAttackOverride = _sdSmokeAttackAgeOverride;
+            int[] ownWinScores = { 90, 40, 60 }, enemyWinScores = { 40, 90, 60 };
+            string[] outcomes = { "own-win", "enemy-win", "tie" };
+            float[] phases = { .10f, .24f, .40f, .64f, .82f };
+            string[] phaseNames = { "loading", "collision", "push", "strike", "recovery" };
+            try
             {
-                SDResetImpactPresentation();
-                typeof(ScoreRound).GetProperty("DamageToNpc").SetValue(impactReceipt, impactDamages[tier]); typeof(ScoreRound).GetProperty("DamageToPlayer").SetValue(impactReceipt, 18);
-                SDRefresh(); SDStartAttackMotion(); SDTickGestureGuides(0);
-                SmokeCheck(_sdImpactTier == tier, "outgoing damage selects visual impact tier " + tier);
-                _sdToast.text = "固定ダメージの演出検証 · " + impactDamages[tier]; _sdToastAge = -1;
-                foreach (float age in new[] { .24f, .36f, .62f })
+                for (int outcome = 0; outcome < outcomes.Length; outcome++)
                 {
-                    _sdAttackAge = age; SDAnimateImpactPresentation(); SDRefreshDieLabelsVisibility();
-                    SmokeCheck(_sdImpactContact == (age >= .30f) && _sdImpactCounter.text == "" && _sdImpactIncomingCounter.text == "",
-                        "tier " + tier + " gates contact without scattered damage numbers at fixed age " + age);
-                    SmokeCapture("damage-tier-" + tier + (age < .30f ? "-precontact" : age < .4f ? "-contact" : "-recovery"));
+                    SDResetImpactPresentation();
+                    typeof(ScoreRound).GetProperty("PlayerKind").SetValue(impactReceipt, ScoreHandKind.Pair);
+                    typeof(ScoreRound).GetProperty("NpcKind").SetValue(impactReceipt, ScoreHandKind.Pair);
+                    typeof(ScoreRound).GetProperty("PlayerScore").SetValue(impactReceipt, ownWinScores[outcome]);
+                    typeof(ScoreRound).GetProperty("NpcScore").SetValue(impactReceipt, enemyWinScores[outcome]);
+                    SDStartAttackMotion(); SDTickGestureGuides(0);
+                    SmokeCheck(_sdAttackPresenter != null && _sdAttackPresenter.Active,
+                        "the clash builds the shared attack presenter for the " + outcomes[outcome]);
+                    SmokeCheck(_sdAttackPresenter.Winner == (outcome == 2 ? -1 : outcome),
+                        "the shared presenter signs the " + outcomes[outcome]);
+                    for (int phase = 0; phase < phases.Length; phase++)
+                    {
+                        // The own win records every canonical phase; the other two outcomes add
+                        // their own strike so all three signs are on record without a capture flood.
+                        if (outcome != 0 && phase != 3) continue;
+                        _sdSmokeAttackAgeOverride = phases[phase];
+                        yield return null;
+                        yield return new WaitForEndOfFrame();
+                        SmokeCheck(Mathf.Abs(_sdAttackAge - phases[phase]) < .0001f,
+                            "the frozen " + outcomes[outcome] + " " + phaseNames[phase] + " age survives the render boundary");
+                        SmokeCheck(_sdAttackPresenter.Active && Mathf.Abs(_sdAttackPresenter.Age - phases[phase]) < .0001f,
+                            "the presenter holds the " + outcomes[outcome] + " " + phaseNames[phase] + " composition");
+                        SmokeCheck(_sdAttackPresenter.Dim != null && _sdAttackPresenter.Dim.color.a > 0f,
+                            "the " + outcomes[outcome] + " " + phaseNames[phase] + " shows the real dim behind the dice");
+                        if (phase == 3)
+                        {
+                            var overlay = (Canvas)typeof(SharedAttackPresenter).GetField("_overlay",
+                                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(_sdAttackPresenter);
+                            bool above = overlay != null && overlay.enabled;
+                            for (int i = 0; i < 5; i++)
+                            {
+                                var ownCanvas = _sdFxDice[i].GetComponent<Canvas>();
+                                var npcCanvas = _sdNpcDieTransforms[i].GetComponent<Canvas>();
+                                above &= ownCanvas != null && ownCanvas.enabled && ownCanvas.sortingOrder > overlay.sortingOrder;
+                                above &= npcCanvas != null && npcCanvas.enabled && npcCanvas.sortingOrder > overlay.sortingOrder;
+                            }
+                            SmokeCheck(above, "all ten real dice render above the dim overlay at the " + outcomes[outcome] + " strike");
+                        }
+                        SDRefreshDieLabelsVisibility();
+                        SmokeCapture("attack-presenter-" + outcomes[outcome] + "-" + phaseNames[phase]);
+                    }
                 }
-                SDResetImpactPresentation();
             }
-            typeof(ScoreRound).GetProperty("DamageToNpc").SetValue(impactReceipt, outgoingDamage); typeof(ScoreRound).GetProperty("DamageToPlayer").SetValue(impactReceipt, incomingDamage);
-            _sdCommitted = impactWasCommitted; SDRefresh();
+            finally
+            {
+                typeof(ScoreRound).GetProperty("PlayerKind").SetValue(impactReceipt, receiptOwnKind);
+                typeof(ScoreRound).GetProperty("NpcKind").SetValue(impactReceipt, receiptEnemyKind);
+                typeof(ScoreRound).GetProperty("PlayerScore").SetValue(impactReceipt, receiptOwnScore);
+                typeof(ScoreRound).GetProperty("NpcScore").SetValue(impactReceipt, receiptEnemyScore);
+                typeof(ScoreRound).GetProperty("DamageToNpc").SetValue(impactReceipt, outgoingDamage);
+                typeof(ScoreRound).GetProperty("DamageToPlayer").SetValue(impactReceipt, incomingDamage);
+                _sdCommitted = impactWasCommitted;
+                SDResetImpactPresentation();
+                _sdSmokeAttackAgeOverride = savedAttackOverride;
+                _sdAttackAge = savedAttackAge;
+                SDRefresh();
+            }
             // Isolated, clearly labelled visual fixtures make rare hands reproducible. They
             // run only under the opt-in smoke flag and never alter ordinary game startup.
             int[][] fixtures = { new[] { 1, 1, 3, 5, 6 }, new[] { 5, 2, 4, 1, 3 },

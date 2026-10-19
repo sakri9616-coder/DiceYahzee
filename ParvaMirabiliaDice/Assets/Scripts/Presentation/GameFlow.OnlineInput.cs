@@ -29,6 +29,7 @@ namespace ParvaMirabilia.Presentation
         private void OnlinePointerBegin(int index, Vector2 screen)
         {
             if (!OnlineCanChoose) return;
+            SDRefreshOnlineFormation();
             _onlineDragging = true; _onlineAiming = false; _onlineDragIndex = index;
             _onlineDragStart = _onlineDragLast = OnlineLocal(screen);
             _onlineOriginalHeld = _onlineHeld; _onlinePainted = 0;
@@ -87,6 +88,7 @@ namespace ParvaMirabilia.Presentation
         private void CommitOnlineHand()
         {
             if (!OnlineCanChoose) return;
+            SDRefreshOnlineFormation();
             if (_onlineState.phase == (int)VersusPhase.ChoosingRoles) SendOnline(DuelNetworkAction.Submit);
             else
             {
