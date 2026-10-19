@@ -328,6 +328,30 @@ namespace ParvaMirabilia.Presentation
                 SDAssertSameDice(proof);
                 if (_sdEngine.Round == 2)
                 {
+                    yield return new WaitForEndOfFrame();
+                    var dieCheck = new System.Text.StringBuilder();
+                    bool diceAlive = true;
+                    for (int side = 0; side < 2; side++)
+                    {
+                        for (int i = 0; i < 5; i++)
+                        {
+                            Transform die = side == 0 ? (Transform)_sdBattle.Find("Die" + i) : _sdNpcDieTransforms[i];
+                            string tag = (side == 0 ? "own" : "enemy") + die;
+                            bool alive = die != null && die.gameObject.activeInHierarchy;
+                            var group = die != null ? die.GetComponent<CanvasGroup>() : null;
+                            if (group != null) alive &= group.alpha > .95f;
+                            var graphic = die != null ? die.GetComponent<UnityEngine.UI.Graphic>() : null;
+                            if (graphic != null) alive &= graphic.enabled && graphic.color.a > .01f;
+                            var canvas = die != null ? die.GetComponent<Canvas>() : null;
+                            // Canvas is expected absent after a reset; if present it must be enabled.
+                            if (canvas != null) alive &= canvas.enabled;
+                            if (!alive) dieCheck.Append((side == 0 ? "own" : "enemy") + i + " ");
+                            diceAlive &= alive;
+                        }
+                    }
+                    SmokeCheck(diceAlive, "round-2 dice restored visibly for own and enemy after the first attack: " + dieCheck);
+                    yield return new WaitForEndOfFrame();
+                    SmokeCapture("round-2-dice-restored");
                     var nextKind = _sdSelectedKind;
                     int used = (int)_sdEngine.LastRound.PlayerKind;
                     int beforeUsed = (used + ScoreRules.HandCount - 1) % ScoreRules.HandCount;
@@ -463,6 +487,7 @@ namespace ParvaMirabilia.Presentation
                         SDRefreshDieLabelsVisibility();
                         SmokeCapture("attack-presenter-" + outcomes[outcome] + "-" + phaseNames[phase]);
                     }
+                    if (outcome == 0) { _sdSmokeAttackAgeOverride = SharedAttackPresenter.Duration + .05f; yield return null; yield return new WaitForEndOfFrame(); SDRefreshDieLabelsVisibility(); SmokeCapture("attack-presenter-own-win-aftermath"); }
                 }
             }
             finally

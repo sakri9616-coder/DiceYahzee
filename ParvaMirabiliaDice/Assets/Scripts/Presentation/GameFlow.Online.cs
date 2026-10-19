@@ -579,6 +579,8 @@ namespace ParvaMirabilia.Presentation
             // match: reset per-match presentation before the impact/intro detection below reads it.
             bool freshMatch = _onlineState == null || next.match != _onlineState.match;
             if (freshMatch && _onlineState != null) ResetOnlineMatchPresentation();
+            if (_onlineState != null && (freshMatch || next.round != _onlineState.round) && _onlineAttackPresenter != null)
+                _onlineAttackPresenter.Reset();
             // Single local gate: true exactly on a ChoosingRoles -> Resolved/Finished transition.
             // Capture pre-strike HP and arm the impact clock BEFORE RefreshOnline so the new
             // snapshot cannot print the final HP ahead of the shared attack timeline.
@@ -797,7 +799,7 @@ namespace ParvaMirabilia.Presentation
         }
         private bool _onlineSmokeMode, _onlineSmokeHost;
         private string _onlineSmokePath;
-        private bool _onlineSmokePlayingCaptured, _onlineSmokeResolvedCaptured, _onlineSmokeImpactCaptured;
+        private bool _onlineSmokePlayingCaptured, _onlineSmokeResolvedCaptured, _onlineSmokeImpactCaptured, _onlineSmokeContactCaptured;
         private void TraceOnlineSmoke(string message, bool error = false)
         {
             System.IO.File.AppendAllText(System.IO.Path.Combine(_smokeOutput, _onlineSmokeHost ? "host.trace" : "guest.trace"), message + Environment.NewLine);
@@ -862,6 +864,7 @@ namespace ParvaMirabilia.Presentation
             ConnectOnline(_onlineSmokeHost);
             bool rematchSmoke = Array.IndexOf(args, "-diceNetRematch") >= 0;
             int smokeMatch = 0;
+            bool round2DiceChecked = false;
             int loggedRound = -1, loggedPhase = -1;
             float deadline = Time.realtimeSinceStartup + (rematchSmoke ? 540 : 300);
             while (Time.realtimeSinceStartup < deadline && OnlineActive && !_onlineStopped)
@@ -891,6 +894,25 @@ namespace ParvaMirabilia.Presentation
                     { _onlineSmokePlayingCaptured = true; SmokeCapture((_onlineSmokeHost ? "host" : "guest") + "-online-playing"); }
                     if (_onlineState.phase == (int)VersusPhase.Resolved && !_onlineSmokeResolvedCaptured)
                     { _onlineSmokeResolvedCaptured = true; SmokeCapture((_onlineSmokeHost ? "host" : "guest") + "-online-resolved"); }
+                }
+                if (!round2DiceChecked && _onlineState.match == 0 && _onlineState.round == 2 && _onlineState.phase == (int)VersusPhase.Playing)
+                {
+                    round2DiceChecked = true;
+                    string diceError = null;
+                    for (int i = 0; i < 5 && diceError == null; i++)
+                    {
+                        foreach (var die in new[] { _onlineOwnDice[i], _onlineEnemyDice[i] })
+                        {
+                            if (die == null || !die.gameObject.activeInHierarchy) { diceError = "die inactive " + i; break; }
+                            var cv = die.GetComponent<Canvas>();
+                            if (cv != null && !cv.enabled) { diceError = "canvas disabled " + i; break; }
+                            var cg = die.GetComponent<CanvasGroup>();
+                            if (cg != null && cg.alpha <= .95f) { diceError = "alpha " + cg.alpha + " " + i; break; }
+                        }
+                    }
+                    if (diceError != null) { TraceOnlineSmoke("DICE_NET_SMOKE round2 dice not restored: " + diceError, true); Application.Quit(2); yield break; }
+                    if (SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null)
+                        SmokeCapture((_onlineSmokeHost ? "host" : "guest") + "-online-round2-dice-restored");
                 }
                 if (_onlineState.phase == (int)VersusPhase.Finished)
                 {
@@ -1093,18 +1115,18 @@ namespace ParvaMirabilia.Presentation
                 _onlineSmokeImpactCaptured = true;
                 SmokeCapture((_onlineSmokeHost ? "host" : "guest") + "-online-impact");
             }
+            if (_onlineSmokeMode && !_onlineSmokeContactCaptured && _onlineState.round == 1 &&
+                _onlineImpactAge >= SharedAttackPresenter.ContactTime + .04f &&
+                _onlineImpactAge < SharedAttackPresenter.Duration &&
+                SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null)
+            {
+                _onlineSmokeContactCaptured = true;
+                SmokeCapture((_onlineSmokeHost ? "host" : "guest") + "-online-contact");
+            }
             _onlineHit.text = "";
             if (_onlineImpactAge >= SharedAttackPresenter.Duration)
             {
                 _onlineImpactAge = -1; _onlineHit.text = "";
-                // Retain the reusable presenter tree; only Reset so the next attack can reuse it.
-                if (_onlineAttackPresenter != null) { _onlineAttackPresenter.Reset(); }
-                _onlineImpactWinner = -1;
-                for (int i = 0; i < 5; i++)
-                {
-                    _onlineOwnDice[i].localScale = _onlineEnemyDice[i].localScale = Vector3.one;
-                    _onlineOwnDice[i].localRotation = _onlineEnemyDice[i].localRotation = Quaternion.identity;
-                }
                 RefreshOnline();
             }
         }

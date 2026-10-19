@@ -198,6 +198,18 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(Engine.History.Count, Is.EqualTo(1));
             CollectionAssert.AreEqual(new[] { false, false, false, false, false }, Engine.Held);
             yield return new WaitForSeconds(.95f);
+            var own = Read<RectTransform[]>("_sdFxDice");
+            var npc = Read<RectTransform[]>("_sdNpcDieTransforms");
+            for (int i = 0; i < 5; i++)
+            {
+                Assert.That(own[i].GetComponent<CanvasGroup>().alpha, Is.Zero, "own die " + i + " fades to transparent after .95s");
+                Assert.That(npc[i].GetComponent<CanvasGroup>().alpha, Is.Zero, "enemy die " + i + " fades to transparent after .95s");
+                Assert.That(own[i].GetComponent<CanvasGroup>().blocksRaycasts, Is.False, "own die " + i + " is not clickable while invisible");
+                Assert.That(npc[i].GetComponent<CanvasGroup>().blocksRaycasts, Is.False, "enemy die " + i + " is not clickable while invisible");
+            }
+            Assert.That(Read<float>("_sdAttackAge"), Is.LessThan(0));
+            TableClick();
+            Assert.That(Engine.Round, Is.EqualTo(2));
             AssertHomes(homes);
         }
 
@@ -260,8 +272,19 @@ namespace ParvaMirabilia.Quality.Tests
             TableClick();
             Assert.That(Engine.Round, Is.EqualTo(1), "a running flight cannot leak into the next turn");
             yield return new WaitForSeconds(.95f);
-            AssertHomes(homes);
+            var own = Read<RectTransform[]>("_sdFxDice");
+            var npc = Read<RectTransform[]>("_sdNpcDieTransforms");
+            for (int i = 0; i < 5; i++)
+            {
+                Assert.That(own[i].GetComponent<CanvasGroup>().alpha, Is.Zero, "own die " + i + " fades to transparent after .95s");
+                Assert.That(npc[i].GetComponent<CanvasGroup>().alpha, Is.Zero, "enemy die " + i + " fades to transparent after .95s");
+                Assert.That(own[i].GetComponent<CanvasGroup>().blocksRaycasts, Is.False, "own die " + i + " is not clickable while invisible");
+                Assert.That(npc[i].GetComponent<CanvasGroup>().blocksRaycasts, Is.False, "enemy die " + i + " is not clickable while invisible");
+            }
             Assert.That(Read<float>("_sdAttackAge"), Is.LessThan(0));
+            TableClick();
+            Assert.That(Engine.Round, Is.EqualTo(2));
+            AssertHomes(homes);
         }
 
         [UnityTest] public IEnumerator TableClickRequiresAFreshPressAfterRecovery_AndAdvancesOnlyOnce()
@@ -1064,8 +1087,37 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(presenter, Is.Not.Null);
             var own = Read<RectTransform[]>("_sdFxDice");
             var npc = Read<RectTransform[]>("_sdNpcDieTransforms");
+            Call("SDResetImpactPresentation");
+            yield return null;
             var ownSource = Snapshot(own);
             var npcSource = Snapshot(npc);
+            var ownGroups = new CanvasGroup[own.Length];
+            var npcGroups = new CanvasGroup[npc.Length];
+            var ownAlpha = new float[own.Length];
+            var npcAlpha = new float[npc.Length];
+            var ownInteractable = new bool[own.Length];
+            var npcInteractable = new bool[npc.Length];
+            var ownBlocks = new bool[own.Length];
+            var npcBlocks = new bool[npc.Length];
+            for (int i = 0; i < 5; i++)
+            {
+                ownGroups[i] = own[i].GetComponent<CanvasGroup>();
+                npcGroups[i] = npc[i].GetComponent<CanvasGroup>();
+                if (ownGroups[i] != null)
+                {
+                    ownAlpha[i] = ownGroups[i].alpha;
+                    ownInteractable[i] = ownGroups[i].interactable;
+                    ownBlocks[i] = ownGroups[i].blocksRaycasts;
+                }
+                if (npcGroups[i] != null)
+                {
+                    npcAlpha[i] = npcGroups[i].alpha;
+                    npcInteractable[i] = npcGroups[i].interactable;
+                    npcBlocks[i] = npcGroups[i].blocksRaycasts;
+                }
+            }
+            Call("SDStartAttackMotion");
+            presenter = AttackPresenter;
             int coreOutgoing = Engine.LastRound.DamageToNpc, coreIncoming = Engine.LastRound.DamageToPlayer;
             Assert.That(PresenterRead<Image>(presenter, "Dim").raycastTarget, Is.False,
                 "the dim backdrop never intercepts the pointer");
@@ -1075,10 +1127,56 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(Vector3.Distance(own[0].localPosition, ownSource[0].Position), Is.GreaterThan(1f),
                 "the fixture is genuinely mid-clash");
 
+            // The fade runs from each group's own contact alpha down to transparent at Duration and holds that.
+            var ownContact = new float[own.Length];
+            var npcContact = new float[npc.Length];
+            for (int i = 0; i < 5; i++)
+            {
+                if (ownGroups[i] != null)
+                {
+                    ownContact[i] = ownGroups[i].alpha;
+                    Assert.That(ownContact[i], Is.GreaterThan(0f), "own die " + i + " visible at contact");
+                }
+                if (npcGroups[i] != null)
+                {
+                    npcContact[i] = npcGroups[i].alpha;
+                    Assert.That(npcContact[i], Is.GreaterThan(0f), "enemy die " + i + " visible at contact");
+                }
+            }
+            Write("_sdAttackAge", (PresenterConstant("ContactTime") + PresenterConstant("Duration")) * 0.5f);
+            Call("SDAnimateImpactPresentation");
+            for (int i = 0; i < 5; i++)
+            {
+                if (ownGroups[i] != null) Assert.That(ownGroups[i].alpha, Is.LessThan(ownContact[i] - .01f), "own die " + i + " fades after contact");
+                if (npcGroups[i] != null) Assert.That(npcGroups[i].alpha, Is.LessThan(npcContact[i] - .01f), "enemy die " + i + " fades after contact");
+            }
+            Write("_sdAttackAge", PresenterConstant("Duration"));
+            Call("SDAnimateImpactPresentation");
+            for (int i = 0; i < 5; i++)
+            {
+                if (ownGroups[i] != null) Assert.That(ownGroups[i].alpha, Is.LessThan(.05f), "own die " + i + " transparent at duration");
+                if (npcGroups[i] != null) Assert.That(npcGroups[i].alpha, Is.LessThan(.05f), "enemy die " + i + " transparent at duration");
+            }
+
             // ...and Reset restores every one of the ten real dice to its captured source pose.
             Call("SDResetImpactPresentation");
             AssertSnapshots(ownSource, own, "own");
             AssertSnapshots(npcSource, npc, "enemy");
+            for (int i = 0; i < 5; i++)
+            {
+                if (ownGroups[i] != null)
+                {
+                    Assert.That(ownGroups[i].alpha, Is.EqualTo(ownAlpha[i]).Within(.001f), "own die " + i + " alpha restored");
+                    Assert.That(ownGroups[i].interactable, Is.EqualTo(ownInteractable[i]), "own die " + i + " interactable restored");
+                    Assert.That(ownGroups[i].blocksRaycasts, Is.EqualTo(ownBlocks[i]), "own die " + i + " blocksRaycasts restored");
+                }
+                if (npcGroups[i] != null)
+                {
+                    Assert.That(npcGroups[i].alpha, Is.EqualTo(npcAlpha[i]).Within(.001f), "enemy die " + i + " alpha restored");
+                    Assert.That(npcGroups[i].interactable, Is.EqualTo(npcInteractable[i]), "enemy die " + i + " interactable restored");
+                    Assert.That(npcGroups[i].blocksRaycasts, Is.EqualTo(npcBlocks[i]), "enemy die " + i + " blocksRaycasts restored");
+                }
+            }
             Assert.That(PresenterRead<bool>(presenter, "Active"), Is.False);
             Assert.That(PresenterRead<float>(presenter, "Age"), Is.Zero);
             Assert.That(PresenterRead<int>(presenter, "Winner"), Is.EqualTo(-1));

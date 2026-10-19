@@ -26,6 +26,12 @@ namespace ParvaMirabilia.Presentation
         private Image _dim;
         private Image _contactCue;
         private Image _impactFlash;
+        private Image _screenFlash;
+        private RectTransform _effectHost;
+        private ScoreHandEffectGraphic _impactGraphic;
+        private Vector2 _rootHome;
+        private bool _rootHomeCaptured;
+        private bool _shaken;
         private bool _built;
         private bool _active;
         private bool _reduced;
@@ -90,11 +96,13 @@ namespace ParvaMirabilia.Presentation
             _ownHpTarget = ownHpTarget;
             _enemyHpTarget = enemyHpTarget;
             _reduced = reducedMotion;
-            _strength = Mathf.Clamp(strengthTier, -2, 2);
+            _strength = Mathf.Clamp(strengthTier, 0, 3);
             _winner = ownAttacks > enemyAttacks ? 0 : enemyAttacks > ownAttacks ? 1 : -1;
             _active = true;
             _age = 0f;
             EnsureBuilt();
+            _rootHomeCaptured = false;
+            CaptureRootHome();
             MeasureGroups();
             Sample(0f);
         }
@@ -108,11 +116,27 @@ namespace ParvaMirabilia.Presentation
         public void Reset()
         {
             RestoreAll();
+            RestoreRootShake();
             _active = false;
             _age = 0f;
             _winner = -1;
             _strength = 0;
             HideOverlay();
+        }
+        private void CaptureRootHome()
+        {
+            if (_rootHomeCaptured || _root == null)
+                return;
+            _rootHome = _root.anchoredPosition;
+            _rootHomeCaptured = true;
+        }
+        private void RestoreRootShake()
+        {
+            if (!_shaken)
+                return;
+            if (_root != null && _rootHomeCaptured)
+                _root.anchoredPosition = _rootHome;
+            _shaken = false;
         }
         private bool CaptureHand(RectTransform[] hand, DieState[] states)
         {
@@ -150,8 +174,13 @@ namespace ParvaMirabilia.Presentation
                 }
                 else
                 {
+                    // A nested canvas owns the die's graphics, so it must stay enabled:
+                    // a disabled one hides the whole die, and a later capture would keep
+                    // that disabled state. It also needs its own raycaster because the
+                    // root raycaster only sees graphics registered to the root canvas.
                     s.Canvas = rt.gameObject.AddComponent<Canvas>();
-                    s.Canvas.enabled = false;
+                    s.Canvas.enabled = true;
+                    rt.gameObject.AddComponent<GraphicRaycaster>();
                 }
                 s.Group = rt.GetComponent<CanvasGroup>();
                 s.HadGroup = s.Group != null;
@@ -229,7 +258,10 @@ namespace ParvaMirabilia.Presentation
             }
             else
             {
-                s.Canvas.enabled = false;
+                // Never leave the presenter's own canvas disabled or stale. Keep it enabled
+                // as a plain nested canvas so the die keeps rendering, and the raycaster
+                // added with it keeps the die receiving input after the clash.
+                s.Canvas.enabled = true;
                 s.Canvas.overrideSorting = false;
                 s.Canvas.sortingOrder = 0;
             }
@@ -268,6 +300,12 @@ namespace ParvaMirabilia.Presentation
             _impactFlash = UiFactory.CreatePanel("ImpactFlash", overlayRt, new Vector2(60f, 60f), Vector2.zero, new Color(1f, 0.94f, 0.78f, 0f));
             _impactFlash.sprite = UiFactory.CircleSprite;
             _impactFlash.gameObject.SetActive(false);
+            _screenFlash = UiFactory.CreateStretchPanel("ImpactScreenFlash", overlayRt, new Color(1f, 0.88f, 0.58f, 0f));
+            _screenFlash.raycastTarget = false;
+            _screenFlash.gameObject.SetActive(false);
+            _effectHost = UiFactory.CreateStretch("ImpactGeometry", overlayRt);
+            _impactGraphic = _effectHost.gameObject.AddComponent<ScoreHandEffectGraphic>();
+            _impactGraphic.raycastTarget = false;
             _overlay.enabled = false;
         }
         private void MeasureGroups()
@@ -299,8 +337,26 @@ namespace ParvaMirabilia.Presentation
         {
             if (_age >= Duration)
             {
-                RestoreVisuals();
-                HideOverlay();
+                if (_reduced)
+                    ApplyReduced();
+                else
+                    ApplyStandard();
+                // Both die groups must be fully transparent after Duration and stay
+                // transparent while the presenter remains Active. The canvases stay
+                // enabled and are made non-interactive so nothing is clickable.
+                for (int i = 0; i < 5; i++)
+                {
+                    if (_own[i].Has)
+                        SetDieAlpha(_own[i], 0f, false);
+                    if (_enemy[i].Has)
+                        SetDieAlpha(_enemy[i], 0f, false);
+                }
+                ClearTransientVfx();
+                RestoreRootShake();
+                if (_overlay != null)
+                    _overlay.enabled = false;
+                if (_dim != null)
+                    _dim.color = new Color(0f, 0f, 0f, 0f);
                 return;
             }
             if (_overlay != null)
@@ -319,20 +375,31 @@ namespace ParvaMirabilia.Presentation
                 ApplyReduced();
             else
                 ApplyStandard();
+            ApplyContactVfx();
         }
         private void ApplyReduced()
         {
+            // Reduced motion keeps every die stationary at its captured source pose.
+            // After impact, both five-die groups fade from ContactTime to full
+            // transparency at Duration, then hold alpha zero.
+            float reducedFade;
+            if (_age <= ContactTime)
+                reducedFade = 1f;
+            else if (_age >= Duration)
+                reducedFade = 0f;
+            else
+                reducedFade = Mathf.Clamp01(1f - (_age - ContactTime) / (Duration - ContactTime));
             for (int i = 0; i < 5; i++)
             {
                 if (_own[i].Has)
                 {
                     EnableCanvas(_own[i]);
-                    SetDieAlpha(_own[i], 1f);
+                    SetDieAlpha(_own[i], reducedFade);
                 }
                 if (_enemy[i].Has)
                 {
                     EnableCanvas(_enemy[i]);
-                    SetDieAlpha(_enemy[i], 1f);
+                    SetDieAlpha(_enemy[i], reducedFade);
                 }
             }
             if (_contactCue != null)
@@ -344,7 +411,7 @@ namespace ParvaMirabilia.Presentation
                     float intensity = 1f + 0.06f * _strength;
                     _contactCue.rectTransform.anchoredPosition = _midpoint;
                     _contactCue.rectTransform.sizeDelta = new Vector2(80f * intensity, 3f);
-                    _contactCue.color = new Color(1f, 0.94f, 0.78f, 0.18f * intensity);
+                    _contactCue.color = new Color(1f, 0.94f, 0.78f, 0.18f * intensity * reducedFade);
                 }
             }
             if (_impactFlash != null)
@@ -357,10 +424,8 @@ namespace ParvaMirabilia.Presentation
                 poseBlend = 0f;
             else if (_age < CollisionTime)
                 poseBlend = Ease((_age - LoadingEnd) / (CollisionTime - LoadingEnd));
-            else if (_age < RecoilStart)
-                poseBlend = 1f;
             else
-                poseBlend = 1f - Ease((_age - RecoilStart) / (Duration - RecoilStart));
+                poseBlend = 1f;
             Vector2 ownOffset;
             Vector2 enemyOffset;
             float ownAlpha;
@@ -467,6 +532,11 @@ namespace ParvaMirabilia.Presentation
                 float t = Mathf.Clamp01((a - ContactTime) / (RecoilStart - ContactTime));
                 flashAlpha = 0.85f * (1f - t) * (1f + 0.05f * _strength);
             }
+            float aftermathFade = 1f;
+            if (a > ContactTime)
+                aftermathFade = a >= Duration ? 0f : Mathf.Clamp01(1f - (a - ContactTime) / (Duration - ContactTime));
+            ownAlpha *= aftermathFade;
+            enemyAlpha *= aftermathFade;
         }
         private void PlaceDie(DieState die, Vector2 targetRoot, float alpha, float poseBlend)
         {
@@ -490,12 +560,103 @@ namespace ParvaMirabilia.Presentation
             die.Canvas.overrideSorting = true;
             die.Canvas.sortingOrder = DieSortOrder;
         }
-        private void SetDieAlpha(DieState die, float alpha)
+        private void SetDieAlpha(DieState die, float alpha, bool interactable = true)
         {
             if (die.Group == null)
                 return;
             float baseAlpha = die.HadGroup ? die.GroupAlpha : 1f;
-            die.Group.alpha = baseAlpha * Mathf.Clamp01(alpha);
+            float clamped = Mathf.Clamp01(alpha);
+            die.Group.alpha = baseAlpha * clamped;
+            // While fading out past contact, a fully transparent die must not
+            // capture clicks. Anything still visible (or before contact) keeps the
+            // captured interactivity so the hand continues to behave normally.
+            bool allow = interactable && clamped > 0.0001f;
+            die.Group.interactable = allow;
+            die.Group.blocksRaycasts = allow;
+        }
+        private void ApplyContactVfx()
+        {
+            float after = _age - ContactTime;
+            float fadeEnd = RecoilStart + 0.20f;
+            if (after < 0f || _age >= fadeEnd)
+            {
+                ClearTransientVfx();
+                RestoreRootShake();
+                return;
+            }
+            float fade = Mathf.Clamp01(1f - after / (fadeEnd - ContactTime));
+            int tier = Mathf.Clamp(_strength, 0, 3);
+            if (_reduced)
+            {
+                if (_impactGraphic != null)
+                {
+                    _impactGraphic.Clear();
+                    Vector2 center = _winner == 0 ? _enemyHpTarget : _winner == 1 ? _ownHpTarget : _midpoint;
+                    Color glow = new Color(1f, 0.94f, 0.78f, 0.16f * fade);
+                    _impactGraphic.Ring(center, 40f + 18f * tier, 1.6f, glow, 24);
+                    _impactGraphic.Flush();
+                }
+                return;
+            }
+            if (_impactGraphic != null)
+            {
+                _impactGraphic.Clear();
+                Color glow = new Color(1f, 0.94f, 0.78f, fade);
+                Vector2 center = _winner == 0 ? _enemyHpTarget : _winner == 1 ? _ownHpTarget : _midpoint;
+                float radius = Mathf.Min(190f, 36f + after * (245f + tier * 110f));
+                _impactGraphic.Ellipse(center, radius, radius * 0.42f, 5f + tier * 3f, glow, 28);
+                if (tier >= 1)
+                    _impactGraphic.Ellipse(center, radius * 0.72f, radius * 0.28f, 3f, glow, 22);
+                int spokes = 8 + tier * 6;
+                for (int k = 0; k < spokes; k++)
+                {
+                    float ang = k * Mathf.PI * 2f / spokes;
+                    Vector2 ray = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang) * 0.6f);
+                    _impactGraphic.Line(center + ray * (20f + after * 80f),
+                        center + ray * Mathf.Min(170f, 40f + after * (180f + tier * 95f)),
+                        4f + tier * 2f, glow);
+                }
+                _impactGraphic.Ring(_midpoint, 60f + 30f * tier + after * 120f, 2.5f + tier, glow, 40);
+                _impactGraphic.Flush();
+            }
+            if (_screenFlash != null)
+            {
+                float flashAlpha = Mathf.Clamp01(1f - after / (0.11f + tier * 0.012f));
+                _screenFlash.gameObject.SetActive(flashAlpha > 0.001f);
+                _screenFlash.color = new Color(1f, 0.88f, 0.58f, flashAlpha * (0.035f + tier * 0.045f));
+            }
+            if (_root != null && _rootHomeCaptured)
+            {
+                float decay = Mathf.Clamp01(1f - after / 0.42f);
+                if (decay > 0f)
+                {
+                    float amp = (5f + 4.5f * tier) * decay * decay;
+                    _root.anchoredPosition = _rootHome + new Vector2(Mathf.Sin(after * 54f),
+                        Mathf.Sin(after * 63f + 1.1f) * 0.72f) * amp;
+                    _shaken = true;
+                }
+                else
+                {
+                    RestoreRootShake();
+                }
+            }
+        }
+        private void ClearTransientVfx()
+        {
+            if (_contactCue != null)
+                _contactCue.gameObject.SetActive(false);
+            if (_impactFlash != null)
+                _impactFlash.gameObject.SetActive(false);
+            if (_screenFlash != null)
+            {
+                _screenFlash.color = new Color(1f, 0.88f, 0.58f, 0f);
+                _screenFlash.gameObject.SetActive(false);
+            }
+            if (_impactGraphic != null)
+            {
+                _impactGraphic.Clear();
+                _impactGraphic.Flush();
+            }
         }
         private void HideOverlay()
         {
@@ -503,10 +664,7 @@ namespace ParvaMirabilia.Presentation
                 _overlay.enabled = false;
             if (_dim != null)
                 _dim.color = new Color(0f, 0f, 0f, 0f);
-            if (_contactCue != null)
-                _contactCue.gameObject.SetActive(false);
-            if (_impactFlash != null)
-                _impactFlash.gameObject.SetActive(false);
+            ClearTransientVfx();
         }
         private static float Ease(float t)
         {

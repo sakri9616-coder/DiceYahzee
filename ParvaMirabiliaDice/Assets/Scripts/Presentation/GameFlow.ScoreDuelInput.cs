@@ -223,7 +223,7 @@ namespace ParvaMirabilia.Presentation
             SDAnimateImpactPresentation();
             if (_sdAttackAge >= SDImpactDuration)
             {
-                SDResetImpactPresentation();
+                _sdAttackAge = -1;
                 SDRefresh();
             }
         }

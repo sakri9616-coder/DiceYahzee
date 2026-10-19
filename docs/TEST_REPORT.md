@@ -1329,3 +1329,13 @@ SDImpactContactDelay = .30 は変更していない。全変更は base commit 7
 - 実行版は1280×720の `logs/player-v023-16x9` と1024×768の `logs/player-v023-4x3` が共に終了0、passed=true、431チェック、errors=[]。`attack-presenter-own-win-loading/collision/push/strike/recovery.png`、`attack-presenter-enemy-win-strike.png`、`attack-presenter-tie-strike.png` は診断専用の時刻固定と実フレーム境界を使って撮影する。衝突・押し合い・両方向の着弾・4:3の描画を実画像で確認した。通常プレイでは時刻を固定しない。
 - 実際の Relay に接続した2プロセス検証：`logs/network-duel-20261019-160906-886`、Passed、57同期状態、両側終了0。両側の記録に `REMATCH_STARTED generation=1 hp=300,300`、`COMPLETE winner=1`、`LOBBY_READY` があり、再戦から結果・ロビー復帰まで成功した。`host-online-impact.png` で共通の暗転と衝突描画も確認した。
 - クリップボードの正確な内容・通知・状態解除は PlayMode で確認した。実ネットワークのホスト待機中に物理マウスでコピーボタンを押す確認、および公開後の実際の版間自動差し替えは今回の検証には含めない。
+
+## 34. 攻撃後のフェードと次ラウンド復元（2026-10-19、0.2.4）
+
+- v0.2.3 の衝突後にダイスが元の位置へ拡大復帰していた動きをやめ、次ラウンドまで着弾位置に留めた。既存の着弾時の画面フラッシュ、リング、揺れを共通演出に戻し、シングルとオンラインで使う。追加 Canvas が後続ラウンドでダイスを消す問題は、Canvas を有効のまま通常の描画順へ戻し、入力用 Raycaster を保つ修正で解消した。
+- 余韻として表示を保持した段階で HP バーと得点を覆う問題が実画像で判明したため、衝突後0.64秒から終了0.90秒にかけて両側の実ダイスをフェードアウトし、終了後は透明のまま保持する。控えめ設定でも姿勢を動かさず同じフェードを行う。次ラウンドの Reset で元の座標・透明度・入力状態を復元する。
+- 実装案は承認済み Experiential DeepSeek API に依頼し、OpenCode CLI の `opencode/deepseek-v4.1-flash-free` でも独立レビューした。敗者側の透明度を上書きする案、誤ったテスト期待値、重複テストを採用せず修正案を再取得した。
+- 最終 PlayMode は131/131、失敗0：`logs/validation-playmode-20261019-210555-660.xml`。途中の130/131は、敗者側が衝突時すでに薄い仕様、および控えめ設定の旧期待値によるテスト失敗で、修正して全件再実行した。
+- Windows 非Development ビルドは `Builds/Windows-20261019-210923-310`、Succeeded、errors=0、warnings=1、version=0.2.4。1280×720 と1024×768の実行版はそれぞれ432チェック、passed=true、errors=[]：`logs/player-v024-16x9-fade` と `logs/player-v024-4x3-fade`。
+- 実オンライン2プロセス：`logs/network-duel-20261019-211155-868`、Passed、57同期状態、両側終了0。`host-online-contact.png` と `guest-online-contact.png` で画面効果と衝突、`host-online-resolved.png` と `guest-online-resolved.png` で両側のダイス消失と得点・HPの可読性、両側の `online-round2-dice-restored.png` で復元を実画像確認した。再戦・ロビー復帰も同検証で通過。
+- シングルの診断用 `attack-presenter-own-win-aftermath.png` に見える下部の小さなダイスは、先行する持越テストの保存ダイス表示であり、攻撃ダイス本体とは別の UI。オンラインの解決後画面には現れない。

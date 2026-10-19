@@ -313,12 +313,16 @@ namespace ParvaMirabilia.Quality.Tests
             object presenter = NewPresenter();
             Begin(presenter, 3, 1, new Vector2(-220f, 90f), new Vector2(260f, 90f), true, 1);
 
-            float[] ages =
+            float contact = Const("ContactTime");
+            float duration = Const("Duration");
+            float fadeAge = duration - 0.05f;
+            float expectedFade = (duration - fadeAge) / (duration - contact);
+
+            float[] stationaryAges =
             {
-                0f, Const("LoadingEnd"), Const("CollisionTime"), Const("PushEnd"),
-                Const("ContactTime"), Const("Duration") - 0.05f
+                0f, Const("LoadingEnd"), Const("CollisionTime"), Const("PushEnd"), contact
             };
-            foreach (float age in ages)
+            foreach (float age in stationaryAges)
             {
                 Invoke(presenter, "Sample", age);
                 for (int i = 0; i < 5; i++)
@@ -326,13 +330,36 @@ namespace ParvaMirabilia.Quality.Tests
                     AssertPose(own[i].Pose, _own[i], 0.0001f, "reduced own " + i + " at " + age);
                     AssertPose(enemy[i].Pose, _enemy[i], 0.0001f, "reduced enemy " + i + " at " + age);
                     Assert.That(_own[i].GetComponent<CanvasGroup>().alpha,
-                        Is.EqualTo(own[i].GroupAlpha).Within(0.0001f), "reduced-motion die stays lit");
+                        Is.EqualTo(own[i].GroupAlpha).Within(0.0001f), "reduced-motion own baseline alpha at " + age);
                     Assert.That(_enemy[i].GetComponent<CanvasGroup>().alpha,
-                        Is.EqualTo(enemy[i].GroupAlpha).Within(0.0001f), "reduced-motion die stays lit");
+                        Is.EqualTo(enemy[i].GroupAlpha).Within(0.0001f), "reduced-motion enemy baseline alpha at " + age);
                 }
                 Assert.That(ReadProp<Image>(presenter, "Dim").color.a, Is.EqualTo(0.55f).Within(0.0001f),
                     "reduced motion uses a steady, non-fading dim");
             }
+
+            Invoke(presenter, "Sample", fadeAge);
+            for (int i = 0; i < 5; i++)
+            {
+                AssertPose(own[i].Pose, _own[i], 0.0001f, "reduced own " + i + " at fade age");
+                AssertPose(enemy[i].Pose, _enemy[i], 0.0001f, "reduced enemy " + i + " at fade age");
+                Assert.That(_own[i].GetComponent<CanvasGroup>().alpha,
+                    Is.EqualTo(own[i].GroupAlpha * expectedFade).Within(0.001f), "reduced-motion own fade alpha");
+                Assert.That(_enemy[i].GetComponent<CanvasGroup>().alpha,
+                    Is.EqualTo(enemy[i].GroupAlpha * expectedFade).Within(0.001f), "reduced-motion enemy fade alpha");
+            }
+            Assert.That(ReadProp<Image>(presenter, "Dim").color.a, Is.EqualTo(0.55f).Within(0.0001f),
+                "reduced motion uses a steady, non-fading dim");
+
+            Invoke(presenter, "Sample", duration);
+            for (int i = 0; i < 5; i++)
+            {
+                Assert.That(_own[i].GetComponent<CanvasGroup>().alpha, Is.EqualTo(0f).Within(0.001f),
+                    "reduced-motion own cleared at duration");
+                Assert.That(_enemy[i].GetComponent<CanvasGroup>().alpha, Is.EqualTo(0f).Within(0.001f),
+                    "reduced-motion enemy cleared at duration");
+            }
+            Assert.That(ReadProp<Image>(presenter, "Dim").color.a, Is.EqualTo(0f).Within(0.0001f));
 
             Invoke(presenter, "Reset");
             for (int i = 0; i < 5; i++)
