@@ -226,7 +226,7 @@ namespace ParvaMirabilia.Quality.Tests
             yield return null;
         }
 
-        [UnityTest] public IEnumerator OnlineImpactRetainsBeforeHpUntilContactThenDrains()
+        [UnityTest] public IEnumerator OnlineImpactKeepsThePreviewHealUntilContactThenDrains()
         {
             var dice = new[] { 1, 2, 3, 4, 5 };
             var enemyDice = new[] { 6, 6, 6, 6, 6 };
@@ -234,12 +234,16 @@ namespace ParvaMirabilia.Quality.Tests
             Call("RefreshOnline");
             var hpText = Read<Text>("_onlineOwnHpText");
             string beforeText = hpText.text;
-            Assert.That(beforeText, Does.Contain("300"), "full HP reading before the strike");
+            Assert.That(beforeText, Does.Contain("300"), "HP reading before the strike");
+            Assert.That(ScoreDuelHealthLine.Heal(hpText), Is.EqualTo(80),
+                "the two kept rerolls are previewed before the round resolves");
+            float ownWidthBefore = Read<Image>("_onlineOwnHpFill").rectTransform.sizeDelta.x;
 
-            // next.damage drives the in-bar red drop label; own 50 / enemy 100 makes the own
-            // drain a real 50-point move that the test can observe against the pre-strike line.
-            var next = NewState(1, "Resolved", 0, 1, 2, dice, enemyDice, 250, 200);
+            // The resolved snapshot agrees with the preview: two kept rerolls restore 80, then
+            // 50/100 damage lands. The bar must hold the pre-round value through the wind-up.
+            var next = NewState(1, "Resolved", 0, 1, 2, dice, enemyDice, 330, 280);
             SetMember(next, "damage", new[] { 50, 100 });
+            SetMember(next, "heal", new[] { 80, 80 });
             Call("ReceiveOnlineSnapshot", JsonUtility.ToJson(next));
             Assert.That(Read<float>("_onlineImpactAge"), Is.EqualTo(0f).Within(0.001f));
             Assert.That(Read<int>("_onlineBeforeOwn"), Is.EqualTo(300), "pre-strike HP captured");
@@ -248,11 +252,27 @@ namespace ParvaMirabilia.Quality.Tests
             Set("_onlineImpactAge", 0.1f);
             Call("UpdateOnlineImpact");
             Assert.That(hpText.text, Is.EqualTo(beforeText),
-                "HP reading must not move before the .64s contact");
+                "the heal preview holds and HP does not move before the heal beat");
+
+            Set("_onlineImpactAge", 0.45f);
+            Call("UpdateOnlineImpact");
+            Assert.That(ScoreDuelHealthLine.Heal(hpText), Is.EqualTo(80), "the green heal owns the line");
+            Assert.That(ScoreDuelHealthLine.Damage(hpText), Is.Zero, "the drop has not arrived yet");
+            Assert.That(Read<Image>("_onlineOwnHpFill").rectTransform.sizeDelta.x, Is.GreaterThan(ownWidthBefore),
+                "the bar rises during the heal");
 
             Set("_onlineImpactAge", 0.70f);
             Call("UpdateOnlineImpact");
             Assert.That(hpText.text, Is.Not.EqualTo(beforeText), "HP reading drains at contact");
+            Assert.That(ScoreDuelHealthLine.Damage(hpText), Is.EqualTo(50));
+            Assert.That(ScoreDuelHealthLine.Heal(hpText), Is.Zero, "the green heal leaves when the drop starts");
+
+            Set("_onlineImpactAge", 1.3f);
+            Call("UpdateOnlineImpact");
+            Assert.That(Read<float>("_onlineImpactAge"), Is.LessThan(0f), "the impact ends after the drop beat");
+            Assert.That(hpText.text, Does.Contain("330"), "the bar rests on the settled health");
+            Assert.That(ScoreDuelHealthLine.Heal(hpText), Is.Zero);
+            Assert.That(ScoreDuelHealthLine.Damage(hpText), Is.Zero, "both beat figures leave the line");
             yield return null;
         }
 

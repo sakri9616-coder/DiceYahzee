@@ -40,6 +40,9 @@ namespace ParvaMirabilia.Core
         public int Round { get; internal set; }
         public int[] Scores { get; internal set; }
         public int[] Damage { get; internal set; }
+        /// <summary>Health restored by each seat's unspent rerolls, applied before damage.</summary>
+        public int[] Heal { get; internal set; }
+        public int[] HpBefore { get; internal set; }
         public int[] RawHpAfter { get; internal set; }
         public bool[] Carry { get; internal set; }
     }
@@ -50,8 +53,8 @@ namespace ParvaMirabilia.Core
         private readonly Random random;
         private readonly int startingHp;
         /// <summary>Normal rerolls per round. A formed Five grants one more on the next round only.</summary>
-        public const int BaseRerolls = 2;
-        public const int MaxRerolls = 3;
+        public const int BaseRerolls = ScoreRules.BaseRerolls;
+        public const int MaxRerolls = ScoreRules.MaxRerolls;
         private readonly VersusPlayer[] players = new VersusPlayer[2];
         private readonly int[][] revealedDice = new int[2][];
         public VersusPhase Phase { get; private set; }
@@ -138,13 +141,18 @@ namespace ParvaMirabilia.Core
         private void Resolve()
         {
             bool reversed = (players[0].Kind == ScoreHandKind.Chance) != (players[1].Kind == ScoreHandKind.Chance);
-            var forecast = new ScoreForecast(players[0].Score, players[1].Score, false, reversed);
-            var receipt = new VersusRound { Round = Round, Scores = new[] { players[0].Score, players[1].Score }, Damage = new int[2], RawHpAfter = new int[2], Carry = new[] { players[0].Carry, players[1].Carry } };
+            var forecast = new ScoreForecast(players[0].Score, players[1].Score, reversed);
+            var receipt = new VersusRound { Round = Round, Scores = new[] { players[0].Score, players[1].Score }, Damage = new int[2], Heal = new int[2], HpBefore = new int[2], RawHpAfter = new int[2], Carry = new[] { players[0].Carry, players[1].Carry } };
             for (int i = 0; i < 2; i++)
             {
                 receipt.Damage[i] = i == 0 ? forecast.DamageToPlayer : forecast.DamageToNpc;
-                receipt.RawHpAfter[i] = players[i].Hp - receipt.Damage[i];
-                players[i].Hp = Math.Max(0, receipt.RawHpAfter[i]);
+                // Both seats keep the same rule: every reroll left unspent at submission
+                // restores 40 health before the clash, up to that seat's starting maximum.
+                var health = new HealthSettlement(players[i].Hp, startingHp, players[i].RerollsLeft, receipt.Damage[i]);
+                receipt.HpBefore[i] = health.Before;
+                receipt.Heal[i] = health.Heal;
+                receipt.RawHpAfter[i] = health.RawAfter;
+                players[i].Hp = health.After;
             }
             LastRound = receipt; Phase = VersusPhase.Resolved;
             if (players[0].Hp == 0 || players[1].Hp == 0)

@@ -147,8 +147,9 @@ namespace ParvaMirabilia.Quality.Tests
             Call("SDSelectCategory", (int)ScoreHandKind.Five);
             Call("SDCommit");
             Assert.That(Engine.LastRound.PlayerKind, Is.EqualTo(ScoreHandKind.Five));
-            Assert.That(Engine.LastRound.PlayerScore, Is.EqualTo(150));
+            Assert.That(Engine.LastRound.PlayerScore, Is.EqualTo(ScoreRules.YahtzeeScore));
             Call("SDResetImpactPresentation");
+            yield return new WaitForSeconds(1.3f);
             Call("SDAdvance");
             Assert.That(Engine.RerollsLeft, Is.EqualTo(3), "a formed Yahtzee grants a third reroll next round");
 
@@ -172,7 +173,7 @@ namespace ParvaMirabilia.Quality.Tests
             yield return new WaitForSeconds(1.0f);
             PressLive(ScoreHandKind.Chance);
             PullToFire();
-            yield return new WaitForSeconds(1.0f);
+            yield return new WaitForSeconds(1.3f);
             TableClick();
             yield return new WaitForSeconds(.9f);
             Assert.That(Engine.PlayerUsed[(int)ScoreHandKind.Chance], Is.True);
@@ -220,7 +221,7 @@ namespace ParvaMirabilia.Quality.Tests
             yield return null;
         }
 
-        [UnityTest] public IEnumerator HpDropIsNamedInRedInsideTheDrainingBar()
+        [UnityTest] public IEnumerator HealthBarNamesHealFirstThenTheDropInTheirOwnBeats()
         {
             Press("_sdTitle", "Start");
             yield return new WaitForSeconds(.8f);
@@ -229,24 +230,73 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(round.DamageToNpc, Is.GreaterThan(0));
             Assert.That(round.DamageToPlayer, Is.GreaterThan(0));
 
-            Call("SDShowHpDeltas", 1f);
+            float healStart = HealthConstant("HealStart");
+            float damageStart = HealthConstant("DamageStart");
+            float end = HealthConstant("End");
             Text npcLine = Read<Text>("_sdNpcHpLabel");
             Text playerLine = Read<Text>("_sdPlayerHpLabel");
+            var npcBand = Read<Image>("_sdNpcLossBand");
+            var playerBand = Read<Image>("_sdPlayerLossBand");
+            float npcBefore = Read<float>("_sdNpcHpShown");
+            float playerBefore = Read<float>("_sdPlayerHpShown");
+
+            // The heal beat is green only. A bar that received a kept reroll rises while its
+            // number names +N; a side with no heal simply stays put with no figure.
+            Call("SDTickHpPresentation", (healStart + damageStart) * .5f);
+            if (round.NpcHeal > 0)
+            {
+                Assert.That(ScoreDuelHealthLine.Heal(npcLine), Is.EqualTo(round.NpcHeal), "the NPC heal is printed green");
+                Assert.That(ScoreDuelHealthLine.Damage(npcLine), Is.Zero, "the drop does not share the heal beat");
+                Assert.That(Read<float>("_sdNpcHpShown"), Is.GreaterThan(npcBefore), "the NPC bar rises during the heal");
+            }
+            if (round.PlayerHeal > 0)
+            {
+                Assert.That(ScoreDuelHealthLine.Heal(playerLine), Is.EqualTo(round.PlayerHeal), "the player heal is printed green");
+                Assert.That(ScoreDuelHealthLine.Damage(playerLine), Is.Zero, "the drop does not share the heal beat");
+                Assert.That(Read<float>("_sdPlayerHpShown"), Is.GreaterThan(playerBefore), "the player bar rises during the heal");
+            }
+            Assert.That(npcBand.gameObject.activeSelf || playerBand.gameObject.activeSelf, Is.False,
+                "no damage band exists before the strike");
+
+            // The damage beat is red only, and the band is drawn inside the bar that is falling.
+            Call("SDTickHpPresentation", (damageStart + end) * .5f);
             Assert.That(npcLine.text, Does.Contain(ScoreDuelHealthLine.Red), "the drop is printed in red");
             Assert.That(playerLine.text, Does.Contain(ScoreDuelHealthLine.Red));
             Assert.That(ScoreDuelHealthLine.Damage(npcLine), Is.EqualTo(round.DamageToNpc));
             Assert.That(ScoreDuelHealthLine.Damage(playerLine), Is.EqualTo(round.DamageToPlayer));
-            var npcBand = Read<Image>("_sdNpcLossBand");
-            var playerBand = Read<Image>("_sdPlayerLossBand");
+            Assert.That(ScoreDuelHealthLine.Heal(npcLine), Is.Zero, "the heal figure leaves before the drop arrives");
+            Assert.That(ScoreDuelHealthLine.Heal(playerLine), Is.Zero);
             Assert.That(npcBand.gameObject.activeSelf && playerBand.gameObject.activeSelf, Is.True, "both losses are highlighted on their bars");
             Assert.That(npcBand.rectTransform.rect.width, Is.GreaterThan(0));
             Assert.That(playerBand.rectTransform.rect.width, Is.GreaterThan(0));
             Assert.That(npcBand.transform.parent, Is.EqualTo(Read<Image>("_sdNpcBar").transform.parent));
             Assert.That(playerBand.transform.parent, Is.EqualTo(Read<Image>("_sdPlayerBar").transform.parent));
-            Call("SDShowHpDeltas", 0f);
+
+            Call("SDTickHpPresentation", end);
             Assert.That(ScoreDuelHealthLine.Damage(Read<Text>("_sdNpcHpLabel")), Is.Zero, "the figure leaves with the drain");
             Assert.That(ScoreDuelHealthLine.Damage(Read<Text>("_sdPlayerHpLabel")), Is.Zero);
+            Assert.That(ScoreDuelHealthLine.Heal(Read<Text>("_sdNpcHpLabel")), Is.Zero);
+            Assert.That(ScoreDuelHealthLine.Heal(Read<Text>("_sdPlayerHpLabel")), Is.Zero);
             Assert.That(npcBand.gameObject.activeSelf || playerBand.gameObject.activeSelf, Is.False, "loss emphasis settles after the drain");
+            yield return null;
+        }
+
+        [UnityTest] public IEnumerator KeptRerollsPreviewAGreenHealInTheHealthLine()
+        {
+            Press("_sdTitle", "Start");
+            yield return new WaitForSeconds(.8f);
+            typeof(ScoreDuel).GetProperty("PlayerHp").SetValue(Engine, 1400);
+            Call("SDRefresh");
+            Text line = Read<Text>("_sdPlayerHpLabel");
+            Assert.That(line.text, Does.StartWith("あなた 1400/1500"));
+            Assert.That(ScoreDuelHealthLine.Heal(line), Is.EqualTo(80), "two kept rerolls name +80");
+            Assert.That(line.text, Does.Contain(ScoreDuelHealthLine.Green));
+
+            Call("SDHandleRightClick");
+            yield return new WaitForSeconds(.82f);
+            Assert.That(Engine.RerollsLeft, Is.EqualTo(1));
+            Assert.That(ScoreDuelHealthLine.Heal(line), Is.EqualTo(40),
+                "spending one reroll halves the health it would have restored");
             yield return null;
         }
 
@@ -278,6 +328,13 @@ namespace ParvaMirabilia.Quality.Tests
         }
 
         // ------------------------------------------------------------------ helpers
+        private static float HealthConstant(string name)
+        {
+            var type = typeof(GameFlow).Assembly.GetType("ParvaMirabilia.Presentation.HealthPresentation");
+            Assert.That(type, Is.Not.Null, "the shared health timeline exists");
+            return (float)type.GetField(name).GetValue(null);
+        }
+
         private static float Luminance(Color color)
         {
             return 0.2126f * Linear(color.r) + 0.7152f * Linear(color.g) + 0.0722f * Linear(color.b);

@@ -5,12 +5,12 @@ namespace ParvaMirabilia.Presentation
 {
     public sealed partial class GameFlow
     {
-        private ScoreHandEffectGraphic _sdGestureGraphic, _sdPracticeGestureGraphic;
+        private IScoreEffectSurface _sdGestureGraphic, _sdPracticeGestureGraphic;
         private Text _sdPracticeGestureText;
         private Image _sdPracticeMouse;
         private Image _sdGuideMouse;
         private Image _sdWheelMouse;
-        private ScoreHandEffectGraphic _sdWheelGraphic;
+        private IScoreEffectSurface _sdWheelGraphic;
         private Sprite _sdMouseLeft, _sdMouseRight;
         private const float SDGuideX = 350;
         private float _sdGuideAge;
@@ -41,8 +41,7 @@ namespace ParvaMirabilia.Presentation
             var root = UiFactory.CreateStretch("GestureGuide", parent);
             var group = root.gameObject.AddComponent<CanvasGroup>();
             group.blocksRaycasts = false;
-            var graphic = root.gameObject.AddComponent<ScoreHandEffectGraphic>();
-            graphic.raycastTarget = false;
+            var graphic = UiFactory.AddVertexGraphic<ScoreHandEffectGraphic>(root.gameObject);
             root.gameObject.SetActive(false);
             return graphic;
         }
@@ -60,8 +59,7 @@ namespace ParvaMirabilia.Presentation
             _sdGuideMouse = SDIcon("MouseInput", _sdGestureGraphic.transform, "input-mouse-left", new Vector2(SDGuideX, 25), 40, SDPositive);
             _sdWheelMouse = _sdBattle.Find("ScoreChoices/WheelSymbol").GetComponent<Image>();
             var wheelRoot = UiFactory.CreateStretch("WheelMotion", _sdBattle.Find("ScoreChoices"));
-            _sdWheelGraphic = wheelRoot.gameObject.AddComponent<ScoreHandEffectGraphic>();
-            _sdWheelGraphic.raycastTarget = false;
+            _sdWheelGraphic = UiFactory.AddVertexGraphic<ScoreHandEffectGraphic>(wheelRoot.gameObject);
             _sdInstruction.gameObject.SetActive(false);
         }
 
@@ -183,7 +181,7 @@ namespace ParvaMirabilia.Presentation
             }
         }
 
-        private void SDDrawGestureGuide(ScoreHandEffectGraphic graphic, Vector2 origin, bool reroll)
+        private void SDDrawGestureGuide(IScoreEffectSurface graphic, Vector2 origin, bool reroll)
         {
             graphic.Clear();
             float t = Mathf.Repeat(_sdGuideAge, 1.6f) / 1.6f;

@@ -175,20 +175,23 @@ namespace ParvaMirabilia.Quality.Tests
             object presenter = NewPresenter();
             Begin(presenter, 2, 2, new Vector2(-240f, 70f), new Vector2(240f, 70f));
 
+            Invoke(presenter, "Sample", (Const("HitStopEnd") + Const("PushEnd")) * 0.5f);
+            Vector2 ownBump = RowCenter(_own);
+            Vector2 enemyBump = RowCenter(_enemy);
+            Assert.That(Vector2.Dot(enemyBump - ownBump, axis), Is.EqualTo(90f).Within(2f),
+                "a tie springs both rows back from the shared contact instead of sliding past each other");
+            Assert.That(Mathf.Abs(Vector2.Dot(enemyBump - ownBump, perp)), Is.LessThan(2f),
+                "the bump stays on the approach axis; nothing slides sideways");
+            Assert.That(ReadProp<int>(presenter, "Winner"), Is.EqualTo(-1), "no false winner mid-bump");
+
             Invoke(presenter, "Sample", Const("PushEnd"));
-            Vector2 ownPush = RowCenter(_own);
-            Vector2 enemyPush = RowCenter(_enemy);
-            Assert.That(Vector2.Dot(enemyPush - ownPush, axis), Is.EqualTo(62f).Within(2f),
-                "balanced clash keeps the original collision separation");
+            Assert.That(Vector2.Dot(RowCenter(_enemy) - RowCenter(_own), axis), Is.EqualTo(62f).Within(2f),
+                "the rows settle back onto the original collision separation");
             Assert.That(ReadProp<int>(presenter, "Winner"), Is.EqualTo(-1), "no false winner at push end");
 
             Invoke(presenter, "Sample", Const("BreakthroughEnd"));
-            Vector2 ownCenter = RowCenter(_own);
-            Vector2 enemyCenter = RowCenter(_enemy);
-            Assert.That(Mathf.Abs(Vector2.Dot(ownCenter - enemyCenter, perp)), Is.GreaterThan(60f),
-                "tied rows split apart instead of pushing");
-            Assert.That(Vector2.Dot(enemyCenter - ownCenter, axis), Is.EqualTo(62f).Within(2f),
-                "breakthrough separates rows without changing collision axis separation");
+            Assert.That(Vector2.Dot(RowCenter(_enemy) - RowCenter(_own), axis), Is.EqualTo(62f).Within(2f),
+                "a tie never breaks through: the rows stay locked at contact");
             Assert.That(ReadProp<int>(presenter, "Winner"), Is.EqualTo(-1), "no false winner after breakthrough");
 
             Invoke(presenter, "Sample", Const("ContactTime"));
@@ -201,7 +204,7 @@ namespace ParvaMirabilia.Quality.Tests
         public void ChanceReversalFromRealForecast_FlipsWinnerWithoutRuleChanges()
         {
             ScoreForecast normal = new ScoreForecast(120, 80);
-            ScoreForecast reversed = new ScoreForecast(120, 80, false, true);
+            ScoreForecast reversed = new ScoreForecast(120, 80, true);
             Assert.That(normal.IsReversed, Is.False);
             Assert.That(reversed.IsReversed, Is.True);
             Assert.That(normal.DamageToNpc, Is.GreaterThan(normal.DamageToPlayer));
@@ -369,6 +372,43 @@ namespace ParvaMirabilia.Quality.Tests
             }
             Assert.That(ReadProp<Image>(presenter, "Dim").color.a, Is.EqualTo(0f).Within(0.0001f));
             Assert.That(((Canvas)ReadField(presenter, "_overlay")).enabled, Is.False);
+        }
+
+        [Test]
+        public void LoserDiceAreSweptAwayWhileTheWinningHandStrikesTheHp()
+        {
+            Vector2 enemyHp = new Vector2(300f, 120f);
+            Vector2 axis = ApproachAxis();
+            Vector2 perp = new Vector2(-axis.y, axis.x);
+            if (perp.x < 0f)
+                perp = -perp; // mirror the presenter's forced right-pointing perpendicular
+            object presenter = NewPresenter();
+            Begin(presenter, 4, 1, new Vector2(-260f, 100f), enemyHp);
+
+            Invoke(presenter, "Sample", Const("PushEnd"));
+            Pose[] atPush = CaptureAll(_enemy);
+            Pose[] ownAtPush = CaptureAll(_own);
+            Invoke(presenter, "Sample", Const("PushEnd") + 0.03f);
+            Assert.That(Vector3.Distance(CapturePose(_enemy[2]).Position, atPush[2].Position),
+                Is.GreaterThan(20f), "the centre loser die is knocked aside first");
+            Assert.That(Vector3.Distance(CapturePose(_enemy[0]).Position, atPush[0].Position),
+                Is.LessThan(0.01f), "outer loser dice wait for their stagger slot");
+
+            Invoke(presenter, "Sample", Const("ContactTime"));
+            for (int i = 0; i < 5; i++)
+            {
+                Pose swept = CapturePose(_enemy[i]);
+                Vector2 flight = new Vector2(swept.Position.x - atPush[i].Position.x,
+                    swept.Position.y - atPush[i].Position.y);
+                Assert.That(Vector2.Dot(flight, perp), Is.GreaterThan(60f),
+                    "loser die " + i + " flies toward the sweeping side");
+                Assert.That(Quaternion.Angle(swept.Rotation, atPush[i].Rotation), Is.GreaterThan(60f),
+                    "loser die " + i + " spins as it is swept away");
+                Assert.That(_enemy[i].GetComponent<CanvasGroup>().alpha,
+                    Is.EqualTo(0f).Within(0.001f), "loser die " + i + " is gone by the strike");
+                Assert.That(Quaternion.Angle(CapturePose(_own[i]).Rotation, ownAtPush[i].Rotation),
+                    Is.LessThan(0.01f), "the winning row keeps its rigid pose");
+            }
         }
 
         private struct Pose

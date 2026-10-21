@@ -61,6 +61,25 @@ namespace ParvaMirabilia.Quality.Tests
             return duel;
         }
 
+        [UnityTest] public IEnumerator OwnKeptRerollsPreviewGreenHealWhileOpponentStaysPrivate()
+        {
+            var duel = new VersusDuel(617);
+            duel.Begin();
+            var players = (VersusPlayer[])typeof(VersusDuel).GetField("players", Private).GetValue(duel);
+            typeof(VersusPlayer).GetProperty("Hp").SetValue(players[0], 1400);
+            typeof(VersusPlayer).GetProperty("Hp").SetValue(players[1], 1400);
+            Publish(duel);
+            Call("RefreshOnline");
+            var own = Read<Text>("_onlineOwnHpText");
+            var enemy = Read<Text>("_onlineEnemyHpText");
+            Assert.That(ScoreDuelHealthLine.Heal(own), Is.EqualTo(80),
+                "the online owner previews the health two kept rerolls would restore");
+            Assert.That(own.text, Does.Contain(ScoreDuelHealthLine.Green));
+            Assert.That(ScoreDuelHealthLine.Heal(enemy), Is.Zero,
+                "the opponent's kept rerolls stay private until the round resolves");
+            yield return null;
+        }
+
         [UnityTest] public IEnumerator RematchNeedsBothSeatsAndRejectsThePreviousMatchCommands()
         {
             var old = Finished();
@@ -133,8 +152,10 @@ namespace ParvaMirabilia.Quality.Tests
             var dice = Read<RectTransform[]>("_onlineOwnDice");
             Assert.That(dice[0].sizeDelta, Is.EqualTo(new Vector2(112, 112)));
             Assert.That(Read<Text>("_onlineScore").font, Is.SameAs(Read<Text>("_sdScoreNumber").font));
-            Assert.That(Read<Text>("_onlineFormula").text, Does.StartWith("(20 + "));
-            Assert.That(Read<Text>("_onlineFormula").text, Does.Contain("×"));
+            Assert.That(Read<Text>("_onlineFormula").text, Does.Contain(" × "),
+                "the shared formula is the dice total times the multiplier");
+            Assert.That(Read<Text>("_onlineFormula").text, Does.Not.Contain("+"),
+                "the old base-plus-total shape is retired");
             Command(0, new DuelNetworkCommand {Action = DuelNetworkAction.FinishRerolls, Round = 1, Sequence = 10});
             Command(1, new DuelNetworkCommand {Action = DuelNetworkAction.FinishRerolls, Round = 1, Sequence = 10});
             Command(0, new DuelNetworkCommand {Action = DuelNetworkAction.Submit, Round = 1, Sequence = 11, Kind = 0});

@@ -154,7 +154,7 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(Engine.NpcHp, Is.EqualTo(Mathf.Max(0, npcBefore - forecast.DamageToNpc)));
             Assert.That(Engine.NpcDice.Length, Is.EqualTo(5));
             Assert.That(Root("_sdNpcReveal").gameObject.activeInHierarchy, Is.True);
-            yield return new WaitForSeconds(.95f);
+            yield return new WaitForSeconds(1.3f);
             TableClick();
             Assert.That(Engine.Round, Is.EqualTo(2));
             Assert.That(Read<bool>("_sdRolling"), Is.True, "next turn must animate too");
@@ -173,7 +173,7 @@ namespace ParvaMirabilia.Quality.Tests
             yield return null;
             PullToFire();
             Assert.That(Engine.PlayerUsed[(int)ScoreHandKind.Chance], Is.True);
-            yield return new WaitForSeconds(.95f);
+            yield return new WaitForSeconds(1.3f);
             TableClick();
             yield return new WaitForSeconds(.8f);
             Assert.That(Read<ScoreHandKind>("_sdSelectedKind"), Is.Not.EqualTo(ScoreHandKind.Chance));
@@ -222,7 +222,7 @@ namespace ParvaMirabilia.Quality.Tests
             {
                 yield return new WaitForSeconds(.8f);
                 PullToFire();
-                yield return new WaitForSeconds(.95f);
+                yield return new WaitForSeconds(1.3f);
                 TableClick();
             }
             Assert.That(Root("_sdResult").gameObject.activeInHierarchy, Is.True);
@@ -341,7 +341,7 @@ namespace ParvaMirabilia.Quality.Tests
                 foreach (Graphic graphic in row.GetComponentsInChildren<Graphic>()) Assert.That(graphic.raycastTarget, Is.False);
             }
             PullToFire();
-            yield return new WaitForSeconds(.95f);
+            yield return new WaitForSeconds(1.3f);
             var receipt = Engine.LastRound;
             for (int i = 0; i < ScoreRules.HandCount; i++)
             {

@@ -16,7 +16,12 @@ namespace ParvaMirabilia.Presentation
         private const float SlotSpacing = 64f;
         private const float BodyGap = 2f;
         private const float PushDistance = 22f;
-        private const float DeflectDistance = 80f;
+        // A tie bounces both hands back from the shared contact point by this much.
+        private const float TieBounce = 14f;
+        private const float SweepDistance = 150f;
+        private const float SweepSpin = 540f;
+        private const float SweepFan = 0.55f;
+        private const float SweepStagger = 0.025f;
         private const float LoadingDim = 0.55f;
         private const float DimFadeTime = 0.08f;
         private const int OverlaySortOrder = 500;
@@ -28,7 +33,7 @@ namespace ParvaMirabilia.Presentation
         private Image _impactFlash;
         private Image _screenFlash;
         private RectTransform _effectHost;
-        private ScoreHandEffectGraphic _impactGraphic;
+        private IScoreEffectSurface _impactGraphic;
         private Vector2 _rootHome;
         private bool _rootHomeCaptured;
         private bool _shaken;
@@ -304,8 +309,7 @@ namespace ParvaMirabilia.Presentation
             _screenFlash.raycastTarget = false;
             _screenFlash.gameObject.SetActive(false);
             _effectHost = UiFactory.CreateStretch("ImpactGeometry", overlayRt);
-            _impactGraphic = _effectHost.gameObject.AddComponent<ScoreHandEffectGraphic>();
-            _impactGraphic.raycastTarget = false;
+            _impactGraphic = UiFactory.AddVertexGraphic<ScoreHandEffectGraphic>(_effectHost.gameObject);
             _overlay.enabled = false;
         }
         private void MeasureGroups()
@@ -435,17 +439,25 @@ namespace ParvaMirabilia.Presentation
             for (int i = 0; i < 5; i++)
             {
                 float slot = (i - 2) * SlotSpacing;
+                // Only the losing hand is individually swept away; the winning hand keeps
+                // its rigid five-die row all the way to the HP strike.
+                float ownSweep = _winner == 1 ? SweepProgress(i, _age) : 0f;
                 if (_own[i].Has)
                 {
-                    Vector2 final = _ownContactCenter + ownOffset + _perp * slot;
-                    Vector2 target = Vector2.Lerp(_own[i].RootCenter, final, poseBlend);
-                    PlaceDie(_own[i], target, Mathf.Lerp(1f, ownAlpha, poseBlend), poseBlend);
+                    Vector2 final = _ownContactCenter + ownOffset + _perp * slot
+                        + SweepScatter(i, ownSweep);
+                    PlaceDie(_own[i], Vector2.Lerp(_own[i].RootCenter, final, poseBlend),
+                        Mathf.Lerp(1f, ownAlpha * (1f - ownSweep), poseBlend), poseBlend,
+                        SweepSpinDegrees(i, ownSweep));
                 }
+                float enemySweep = _winner == 0 ? SweepProgress(i, _age) : 0f;
                 if (_enemy[i].Has)
                 {
-                    Vector2 final = _enemyContactCenter + enemyOffset + _perp * slot;
-                    Vector2 target = Vector2.Lerp(_enemy[i].RootCenter, final, poseBlend);
-                    PlaceDie(_enemy[i], target, Mathf.Lerp(1f, enemyAlpha, poseBlend), poseBlend);
+                    Vector2 final = _enemyContactCenter + enemyOffset + _perp * slot
+                        + SweepScatter(i, enemySweep);
+                    PlaceDie(_enemy[i], Vector2.Lerp(_enemy[i].RootCenter, final, poseBlend),
+                        Mathf.Lerp(1f, enemyAlpha * (1f - enemySweep), poseBlend), poseBlend,
+                        SweepSpinDegrees(i, enemySweep));
                 }
             }
             if (_contactCue != null)
@@ -482,7 +494,6 @@ namespace ParvaMirabilia.Presentation
             enemyAlpha = 1f;
             flashAlpha = 0f;
             float push = 0f;
-            float deflect = 0f;
             float travel = 0f;
             if (a >= HitStopEnd)
             {
@@ -490,13 +501,6 @@ namespace ParvaMirabilia.Presentation
                     push = Ease((a - HitStopEnd) / (PushEnd - HitStopEnd));
                 else
                     push = 1f;
-            }
-            if (a >= PushEnd)
-            {
-                if (a < BreakthroughEnd)
-                    deflect = Ease((a - PushEnd) / (BreakthroughEnd - PushEnd));
-                else
-                    deflect = 1f;
             }
             if (a >= BreakthroughEnd)
             {
@@ -511,21 +515,21 @@ namespace ParvaMirabilia.Presentation
             enemyOffset += pushVec;
             if (_winner == 0)
             {
-                enemyOffset += _perp * (DeflectDistance * deflect);
-                enemyAlpha = 1f - 0.8f * deflect;
                 ownOffset = Vector2.Lerp(ownOffset, _enemyHpTarget - _ownContactCenter, travel);
             }
             else if (_winner == 1)
             {
-                ownOffset += _perp * (DeflectDistance * deflect);
-                ownAlpha = 1f - 0.8f * deflect;
                 enemyOffset = Vector2.Lerp(enemyOffset, _ownHpTarget - _enemyContactCenter, travel);
             }
             else
             {
-                float d = DeflectDistance * 0.45f * deflect;
-                ownOffset += _perp * d;
-                enemyOffset -= _perp * d;
+                // A tie is a mutual bump: both hands drive into the same contact point,
+                // spring back from it and settle touching again. The old sideways split
+                // read as the two hands sliding past each other instead of hitting.
+                float bump = Mathf.Sin(
+                    Mathf.Clamp01((a - HitStopEnd) / (PushEnd - HitStopEnd)) * Mathf.PI);
+                ownOffset -= _axis * (TieBounce * bump);
+                enemyOffset += _axis * (TieBounce * bump);
             }
             if (_winner != -1 && a >= ContactTime && a < RecoilStart)
             {
@@ -538,7 +542,35 @@ namespace ParvaMirabilia.Presentation
             ownAlpha *= aftermathFade;
             enemyAlpha *= aftermathFade;
         }
-        private void PlaceDie(DieState die, Vector2 targetRoot, float alpha, float poseBlend)
+        private float SweepProgress(int index, float age)
+        {
+            if (_winner == -1 || age < PushEnd)
+                return 0f;
+            // Centre dice are struck first, outer dice trail behind: the sweep reads as
+            // the passing winning hand flicking each loser aside in turn.
+            float start = PushEnd + Mathf.Abs(index - 2) * SweepStagger;
+            return Ease(Mathf.Clamp01((age - start) / Mathf.Max(0.01f, ContactTime - start)));
+        }
+        private Vector2 SweepScatter(int index, float progress)
+        {
+            if (progress <= 0f)
+                return Vector2.zero;
+            // A fan held open toward the sweeping side: every loser die still flies to that
+            // side, but the lane spread keeps the five flights from overlapping.
+            Vector2 dir = _perp + _axis * ((index - 2) / 2f) * SweepFan;
+            if (dir.sqrMagnitude < 0.0001f)
+                dir = _perp;
+            float distance = SweepDistance * (1f + 0.06f * _strength)
+                * (0.85f + 0.11f * Mathf.Abs(index - 2));
+            return dir.normalized * (distance * progress);
+        }
+        private float SweepSpinDegrees(int index, float progress)
+        {
+            if (progress <= 0f)
+                return 0f;
+            return SweepSpin * (index % 2 == 0 ? 1f : -1f) * progress;
+        }
+        private void PlaceDie(DieState die, Vector2 targetRoot, float alpha, float poseBlend, float spinDegrees = 0f)
         {
             if (!die.Has || die.Rect == null)
                 return;
@@ -549,7 +581,7 @@ namespace ParvaMirabilia.Presentation
             float sy = die.RootHeight > 0.0001f ? DisplaySize / die.RootHeight : 1f;
             Vector3 contactScale = new Vector3(die.LocalScale.x * sx, die.LocalScale.y * sy, die.LocalScale.z);
             die.Rect.localScale = Vector3.Lerp(die.LocalScale, contactScale, poseBlend);
-            die.Rect.localRotation = die.LocalRotation;
+            die.Rect.localRotation = Quaternion.Euler(0f, 0f, spinDegrees) * die.LocalRotation;
             SetDieAlpha(die, alpha);
         }
         private void EnableCanvas(DieState die)
@@ -616,7 +648,6 @@ namespace ParvaMirabilia.Presentation
                         center + ray * Mathf.Min(170f, 40f + after * (180f + tier * 95f)),
                         4f + tier * 2f, glow);
                 }
-                _impactGraphic.Ring(_midpoint, 60f + 30f * tier + after * 120f, 2.5f + tier, glow, 40);
                 _impactGraphic.Flush();
             }
             if (_screenFlash != null)

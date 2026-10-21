@@ -30,18 +30,19 @@ namespace ParvaMirabilia.Core
 
         static ScoreHoldPolicyExact() { BuildTransitions(); }
 
-        internal static int Plan(int[] dice, bool[] available, int rerollsLeft, int round, NpcPersonality personality)
+        internal static int Plan(int[] dice, bool[] available, int rerollsLeft, int round, NpcPersonality personality,
+            bool valueRerollHeal = false)
         {
             int inventory = 0;
             for (int i = 0; i < available.Length; i++) if (available[i]) inventory |= 1 << i;
             if (inventory == 0) throw new InvalidOperationException("未使用の役がありません");
-            int key = inventory | (round < 5 ? 0 : 1 << 9) | ((int)personality << 10);
+            int key = inventory | (round < 5 ? 0 : 1 << 9) | ((int)personality << 10) | (valueRerollHeal ? 1 << 12 : 0);
             Policy policy;
             lock (Cache)
             {
                 if (!Cache.TryGetValue(key, out policy))
                 {
-                    policy = Solve(available, round, personality); Cache.Add(key, policy);
+                    policy = Solve(available, round, personality, valueRerollHeal); Cache.Add(key, policy);
                 }
             }
             var counts = new int[6];
@@ -60,19 +61,34 @@ namespace ParvaMirabilia.Core
             return mask;
         }
 
-        private static Policy Solve(bool[] available, int round, NpcPersonality personality)
+        private static Policy Solve(bool[] available, int round, NpcPersonality personality, bool valueRerollHeal)
         {
             var stop = new double[States.Length];
             for (int state = 0; state < stop.Length; state++)
                 stop[state] = ScoreHoldPolicy.Utility(
                     ScoreHoldPolicy.Select(CanonicalCodes[state], available, round, personality), round, personality);
+            // Choosing to stop keeps every reroll still in hand, so each remaining reroll is worth
+            // its 40 health in the same utility units as score. The continuation values already
+            // include the health from rerolls still kept after the next roll.
+            double heal = valueRerollHeal ? ScoreRules.RerollHeal : 0;
+            var stopOne = Add(stop, heal);
+            var stopTwo = Add(stop, heal * 2);
+            var stopThree = Add(stop, heal * 3);
             var oneValues = new double[States.Length];
             var policy = new Policy { One = new int[States.Length], Two = new int[States.Length], Three = new int[States.Length] };
-            Pass(stop, stop, oneValues, policy.One);
+            Pass(stop, stopOne, oneValues, policy.One);
             var twoValues = new double[States.Length];
-            Pass(oneValues, stop, twoValues, policy.Two);
-            Pass(twoValues, stop, new double[States.Length], policy.Three);
+            Pass(oneValues, stopTwo, twoValues, policy.Two);
+            Pass(twoValues, stopThree, new double[States.Length], policy.Three);
             return policy;
+        }
+
+        private static double[] Add(double[] values, double amount)
+        {
+            if (amount <= 0) return values;
+            var result = new double[values.Length];
+            for (int i = 0; i < values.Length; i++) result[i] = values[i] + amount;
+            return result;
         }
 
         private static void Pass(double[] continuation, double[] stop, double[] values, int[] choice)

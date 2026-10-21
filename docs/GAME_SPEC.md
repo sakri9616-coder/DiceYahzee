@@ -62,10 +62,10 @@
 
 | 段階 | 内容 |
 | --- | --- |
-| 開始 | `Begin` が Round=1、自分の HP=300、相手 HP=難易度別値にし、`PrepareRound` で相手の手を先に確定する |
+| 開始 | `Begin` が Round=1、自分の HP=1500、相手 HP=難易度別値にし、`PrepareRound` で相手の手を先に確定する |
 | ロール | 人間は 5d6。相手の出目は人間の投擲前に確定済みで、公開情報である |
 | 保持 | 残すダイスをクリック・横ドラッグで選ぶ |
-| 振り直し | 保持しなかった目を最大 2 回振る（ヤッツィー成立の翌ラウンドは 3 回） |
+| 振り直し | 保持しなかった目を最大 2 回振る（ヤッツィー成立の翌ラウンドは 3 回）。残した回数×40 は確定時に回復する |
 | コミット | 使う役を選び、下引きで発射して確定する |
 | 被ダメ交換 | 双方の得点から共通軽減を引いた被害を同時に与える |
 | 次ラウンド | クリックで `NextRound` へ進む |
@@ -80,43 +80,45 @@
 | Resolving | 被害を確定した。次への入力待ち |
 | Finished | 決着済み |
 
-人間の振り直しはラウンド開始時に 2 回（前ラウンドのヤッツィー成立があれば 3 回、上限 3）。相手は難易度によらず 2 回の期待値方針で打ち、人間の振り直し回数は相手の将来の出目を変えない（乱数ストリームが別）。9 欄を使い切った側だけが次ラウンドの開始時に欄を戻す（HP と保存の使用状態は戻さない）。
+人間の振り直しはラウンド開始時に 2 回（前ラウンドのヤッツィー成立があれば 3 回、上限 3）。画面で使う相手（Expert）も同じく 2 回（同条件で 3 回）で、人間の振り直し回数は相手の将来の出目を変えない（乱数ストリームが別）。内部互換の Balanced だけは従来どおり 1 回の簡易方針を保つ。9 欄を使い切った側だけが次ラウンドの開始時に欄を戻す（HP と保存の使用状態は戻さない）。
 
-被害は両方の点数の低い方を P・N として共通軽減 `A = floor(min(P,N)/2)` を両方の攻撃から同じだけ引き、同時に与える。HP は 0 で止め、どちらかが 0 になった時点で決着する。同時 KO は丸める前の残 HP の大きい側の勝ち、等しければ引き分け（「奇跡」）とする。`SafetyRoundBound = ceil(300/13) = 24` は自動試合の内部上限であり、ゲームのターン上限でもターン数判定でもない。
+確定時に使わなかった振り直しは、被害を適用する前に 1 回につき 40 の回復へ変わる（4 章）。両者とも同じ規則で、プレイヤー／NPC の非対称はない。
+
+被害は両方の点数の低い方を P・N として共通軽減 `A = floor(min(P,N)/2)` を両方の攻撃から同じだけ引き、同時に与える。HP は 0 で止め、どちらかが 0 になった時点で決着する。回復は被害より先に適用し、丸める前の残 HP（同時 KO の比較対象）にも含める。同時 KO は丸める前の残 HP の大きい側の勝ち、等しければ引き分け（「奇跡」）とし、理由行は「同時KO（残HP判定）」と表示する。`SafetyRoundBound = ceil(2750/25) = 110` は自動試合のループガードであり、ゲームのターン上限でもターン数判定でもない。最大 HP の相手と最小被害 25 の交換を想定した値で、回復が続けばこれを超え得るため、呼び出し側は実際の決着で必ず抜ける。
 
 **根拠**: `Core/ScoreDuel.cs`（`Begin`, `PrepareRound`, `Roll`, `Reroll`, `Resolve`, `SafetyRoundBound`）, `Core/VersusDuel.cs`（`Prepare`, `Resolve`）
 
 ## 4. 役・得点・ダメージ
 
-得点は `floor((20＋5 ダイスの出目合計)×選択役の倍率)`。倍率は 1/4 刻みの整数（`Quarters`）で持つ。未成立の欄も選べ、その場合は倍率 1（倍率 4/4）で得点は `20＋出目合計` になり、その欄を消費する。ヤッツィー成立だけは倍率を使わず 150 点固定である。
+得点は `floor(5 ダイスの出目合計 × 選択役の倍率)`。倍率は `Multipliers` の整数で持つ。未成立の欄も選べ、その場合は一律 ×10 で得点は `出目合計 × 10` になり、その欄を消費する。ヤッツィー成立だけは倍率を使わず 900 点固定である。端数は出ない（総和も倍率も整数）。
 
-| 役 | enum | 成立条件 | Quarters | 倍率 | 備考 |
-| --- | --- | --- | --- | --- | --- |
-| ペア | Pair | 同じ目が 2 個以上 | 6 | ×1.5 | マスクは最小 2 個 |
-| ツーペア | TwoPair | 異なる 2 組のペア | 8 | ×2 | |
-| スリーカインド | Three | 同じ目が 3 個以上 | 8 | ×2 | |
-| フルハウス | FullHouse | 3 個＋2 個（異なる目） | 10 | ×2.5 | マスクは全 5 個 |
-| 小ストレート | SmallStraight | 異なる 4 連続 | 8 | ×2 | |
-| フォーカインド | Four | 同じ目が 4 個以上 | 12 | ×3 | |
-| 大ストレート | LargeStraight | 異なる 5 連続 | 10 | ×2.5 | |
-| ヤッツィー | Five | 同じ目が 5 個 | 12 | 成立時 150 点固定 | 未成立なら ×3 の式 |
-| チャンス | Chance | 条件なし（常に成立扱い） | 4 | ×1 | 第 5 章 |
+| 役 | enum | 成立条件 | 倍率 | 備考 |
+| --- | --- | --- | --- | --- |
+| ペア | Pair | 同じ目が 2 個以上 | ×15 | マスクは最小 2 個 |
+| ツーペア | TwoPair | 異なる 2 組のペア | ×20 | |
+| スリーカインド | Three | 同じ目が 3 個以上 | ×20 | |
+| フルハウス | FullHouse | 3 個＋2 個（異なる目） | ×25 | マスクは全 5 個 |
+| 小ストレート | SmallStraight | 異なる 4 連続 | ×20 | |
+| フォーカインド | Four | 同じ目が 4 個以上 | ×30 | |
+| 大ストレート | LargeStraight | 異なる 5 連続 | ×25 | |
+| ヤッツィー | Five | 同じ目が 5 個 | 成立時 900 点固定 | 未成立なら ×30 の式 |
+| チャンス | Chance | 条件なし（常に成立扱い） | ×10 | 第 5 章 |
 
-役名・倍率タグ・得点の表記は次のとおり。右の役レールは「役名 → 倍率タグ → 得点」の 3 列で、倍率タグはヤッツィーが「150点」、チャンスが「逆転」、他は「×1.5」「×2」「×2.5」「×3」を出す。役レールの点数列は選択中だけ金色の印を伴い、使用済みは「—」と暗色で示す。
+役名・倍率タグ・得点の表記は次のとおり。右の役レールは「役名 → 倍率タグ → 得点」の 3 列で、倍率タグはヤッツィーが「900点」、チャンスが「逆転」、他は「×15」「×20」「×25」「×30」を出す。役レールの点数列は選択中だけ金色の印を伴い、使用済みは「—」と暗色で示す。
 
 | 役 | 倍率タグ | 遊び方の説明 |
 | --- | --- | --- |
-| ペア | ×1.5 | 同じ目 2 つ · ×1.5 |
-| ツーペア | ×2 | ペア 2 組 · ×2 |
-| スリーカインド | ×2 | 同じ目 3 つ · ×2 |
-| フルハウス | ×2.5 | 3 つ＋2 つ · ×2.5 |
-| 小ストレート | ×2 | 4 連続 · ×2 |
-| フォーカインド | ×3 | 同じ目 4 つ · ×3 |
-| 大ストレート | ×2.5 | 5 連続 · ×2.5 |
-| ヤッツィー | 150点 | 同じ目 5 つ · 150点 |
-| チャンス | 逆転 | 条件なし · ×1 |
+| ペア | ×15 | 同じ目 2 つ · ×15 |
+| ツーペア | ×20 | ペア 2 組 · ×20 |
+| スリーカインド | ×20 | 同じ目 3 つ · ×20 |
+| フルハウス | ×25 | 3 つ＋2 つ · ×25 |
+| 小ストレート | ×20 | 4 連続 · ×20 |
+| フォーカインド | ×30 | 同じ目 4 つ · ×30 |
+| 大ストレート | ×25 | 5 連続 · ×25 |
+| ヤッツィー | 900点 | 同じ目 5 つ · 900点 |
+| チャンス | 逆転 | 条件なし · ×10 |
 
-得点の計算は、中央に `(20 + 出目合計) ×倍率`（例「(20 + 17) ×2」）の内訳を出す。加算範囲を括弧で明示し、内部の得点計算は変更しない。ヤッツィー成立だけは「150」を出す。遊び方は「得点＝（20＋出目合計）×倍率、端数切捨て。」を最上段に掲げる。
+得点の計算は、中央に `出目合計 × 倍率`（例「17 × 20」）の内訳を出す。ヤッツィー成立だけは「900」を出す。遊び方は「得点＝出目合計×倍率」を最上段に掲げる。
 
 ダメージは、P を自分の得点、N を相手の予告点数として次で決まる。
 
@@ -126,25 +128,33 @@
 | 相手が受ける被害 | `DamageToNpc = P − A` |
 | 自分が受ける被害 | `DamageToPlayer = N − A` |
 
-例として、{2,3,3,4,5} の小ストレートは総和 17 で 74 点、同じ出目の大ストレートは未成立で 37 点。{6,2,5,3,4} の大ストレートは総和 20 で 100 点。{3,3,3,3,3} のチャンスは 35 点である。
+例として、{2,3,3,4,5} の小ストレートは総和 17 で 340 点、同じ出目の大ストレートは未成立で 170 点。{6,2,5,3,4} の大ストレートは総和 20 で 500 点。{3,3,3,3,3} のチャンスは 150 点である。
 
 | 出目 | 選ぶ役 | 成立 | 総和 | 得点 |
 | --- | --- | --- | --- | --- |
-| 1・1・1・1・6 | フォーカインド | 成立 | 10 | (20+10)×3 = 90 |
-| 6・6・5・4・2 | ペア | 成立 | 23 | floor((20+23)×1.5) = 64 |
-| 2・3・3・4・5 | 小ストレート | 成立 | 17 | (20+17)×2 = 74 |
-| 2・3・3・4・5 | 大ストレート | 未成立 | 17 | 20+17 = 37 |
-| 6・2・5・3・4 | 大ストレート | 成立 | 20 | (20+20)×2.5 = 100 |
-| 3・3・3・3・3 | チャンス | 成立扱い | 15 | 20+15 = 35 |
-| 1・1・1・1・1 | ヤッツィー | 成立 | 5 | 150（固定） |
+| 1・1・1・1・6 | フォーカインド | 成立 | 10 | 10×30 = 300 |
+| 6・6・5・4・2 | ペア | 成立 | 23 | 23×15 = 345 |
+| 2・3・3・4・5 | 小ストレート | 成立 | 17 | 17×20 = 340 |
+| 2・3・3・4・5 | 大ストレート | 未成立 | 17 | 17×10 = 170 |
+| 6・2・5・3・4 | 大ストレート | 成立 | 20 | 20×25 = 500 |
+| 3・3・3・3・3 | チャンス | 成立扱い | 15 | 15×10 = 150 |
+| 1・1・1・1・1 | ヤッツィー | 成立 | 5 | 900（固定） |
 
-ダメージの例として、P=56・N=70 なら `A = 28` で相手へ 28・自分へ 42。同点 32 なら双方 16。低い側の攻撃も残る。
+ダメージの例として、P=560・N=700 なら `A = 280` で相手へ 280・自分へ 420。同点 320 なら双方 160。低い側の攻撃も残る。
 
-**根拠**: `Core/ScoreDuel.cs`（`ScoreRules`、`Names`、`Quarters`、`BuildTable`、`Add`、`ScoreForecast`）, `Presentation/GameFlow.ScoreDuelLayout.cs`（`SDMultiplier`, `SDRailMultiplier`, `SDCalculation`）, `Presentation/GameFlow.ScoreDuel.cs`（`SDBuildRules`, `SDBuildLiveScorecard`）, `Tests/EditMode/ScoreDuelTests.cs`（`StraightMasksContainOneOfEachNecessaryFaceAndNeverDuplicates`, `AnUnformedCategoryKeepsTheBaseAndDiceTotalAndConsumesItsSlot`）
+**根拠**: `Core/ScoreDuel.cs`（`ScoreRules`、`Names`、`Multipliers`、`UnformedMultiplier`、`YahtzeeScore`、`BuildTable`、`Add`、`ScoreForecast`、`HealthSettlement`）, `Presentation/GameFlow.ScoreDuelLayout.cs`（`SDMultiplier`, `SDRailMultiplier`, `SDCalculation`）, `Presentation/GameFlow.ScoreDuel.cs`（`SDBuildRules`, `SDBuildLiveScorecard`）, `Tests/EditMode/ScoreDuelTests.cs`（`StraightMasksContainOneOfEachNecessaryFaceAndNeverDuplicates`, `AnUnformedCategoryPaysTheDiceTotalAtTheFlatRateAndConsumesItsSlot`）
+
+### 振り直し温存による回復
+
+確定時、ダメージを適用する前に、使わなかった振り直し 1 回につき 40 回復する（`ScoreRules.RerollHeal = 40`、`ScoreRules.HealFor`）。回復はその側の最大 HP（自分 1500、相手は難易度別の初期 HP）で止まり、超えた分は捨てる。両者とも基本 2 回、ヤッツィー成立の翌ラウンドは 3 回なので、最大 120 まで回復できる。プレイヤーと NPC の間に非対称な扱いはない。
+
+例：HP 1400 で振り直しを 2 回残して確定すると 80 回復して 1480 になり、そこから被害を引く。HP 1490 なら 10 だけ回復して 1500 で止まる。回復後の HP が被害で 0 以下になれば KO である。
+
+**根拠**: `Core/ScoreDuel.cs`（`ScoreRules.RerollHeal`, `ScoreRules.HealFor`, `HealthSettlement`, `ScoreRound.PlayerHeal`, `ScoreRound.NpcHeal`, `ScoreDuel.Resolve`）, `Core/VersusDuel.cs`（`VersusRound.Heal`, `VersusRound.HpBefore`, `Resolve`）
 
 ## 5. Chance 直前宣言の XOR 反転規則
 
-チャンスは条件を持たず、どの出目からも選べる。`ScoreRules` の内部では常に `IsFormed = true`・マスク 31・得点 `20＋出目合計` として作られる（ユーザー決定 2026-10-18 の設計意図）。倍率は 4/4 の ×1 なので、出目が役を成していなくてもチャンスは点数を持つ。チャンスも 9 欄の 1 つで、使えばその対戦では再使用できない（9 欄を使い切れば戻る）。
+チャンスは条件を持たず、どの出目からも選べる。`ScoreRules` の内部では常に `IsFormed = true`・マスク 31・得点 `出目合計 × 10` として作られる（ユーザー決定 2026-10-18 の設計意図、倍率は 2026-10-20 に ×10 へ統一）。出目が役を成していなくてもチャンスは点数を持つ。チャンスも 9 欄の 1 つで、使えばその対戦では再使用できない（9 欄を使い切れば戻る）。
 
 被害の受け手の入れ替えは、両者の宣言の XOR で決まる。
 
@@ -159,7 +169,7 @@
 
 相手 NPC もチャンスを宣言し得る。`ScoreHoldPolicy.Utility` はチャンスの効用を `offer.Score` とし、ラウンド 5 未満では 4 を引く。`Chance` を候補から外す処理も `IsFormed` での門番も置かない（設計意図コメント 2026-10-18）。
 
-反転の実例（テストの固定値）：自分のヤッツィー 150 点に対し相手の予告がチャンス 51 点なら `A = 25`、反転により自分が 125、相手が 26 の被害を受ける。自分のチャンス 25 点に対し相手の予告が 101 点なら `A = 12`、自分が 13、相手が 89。双方チャンス（25 点と 51 点）なら反転せず、自分が 39、相手が 13。
+反転の実例（テストの固定値）：自分のヤッツィー 900 点に対し相手の予告がチャンス 51 点なら `A = 25`、反転により自分が 875、相手が 26 の被害を受ける。自分のチャンス 50 点に対し相手の予告が 101 点なら `A = 25`、自分が 25、相手が 76。双方チャンス（50 点と 51 点）なら反転せず、自分が 26、相手が 25。
 
 表示では、対戦中にチャンスを選ぶと中央の 5 ダイスすべてに金色の輪と立ち上る火花が出て、入れ替えの対象を示す（控えめ設定では静止した輪のみ）。反転規則の文は遊び方の「チャンス：ダメージ計算式を反転させます。」が担う。オンライン画面も規則と予告の欄が担い、浮遊する告知行は置かない。
 
@@ -167,19 +177,19 @@
 
 ## 6. 相手5種
 
-難易度は相手の初期 HP だけを変える。相手の打ち方は 5 種とも同じ上級（Expert）の期待値方針である。自分の HP はどの難易度でも 300。
+難易度は相手の初期 HP だけを変える。相手の打ち方は 5 種とも同じ上級（Expert）の期待値方針である。自分の HP はどの難易度でも 1500。
 
 | ボタン | 内部の型 | 相手 HP |
 | --- | --- | --- |
-| 入門 | Expert | 250 |
-| 初級 | Expert | 350 |
-| 中級 | Expert | 400 |
-| 上級 | Expert | 450 |
-| 超級 | Expert | 550 |
+| 入門 | Expert | 1250 |
+| 初級 | Expert | 1750 |
+| 中級 | Expert | 2000 |
+| 上級 | Expert | 2250 |
+| 超級 | Expert | 2750 |
 
-相手 HP の表は `NpcHpByTier = {250, 350, 400, 450, 550}` の 1 箇所で持つ。ボタンも対局もこの表を参照するため、表示と実際の HP は食い違わない。難易度名は `NpcPersonality` の `Expert` だけを使い、`Balanced`（標準）・`Aggressive`（大役）・`Careful` は内部互換として残るが画面には出さない。
+相手 HP の表は `NpcHpByTier = {1250, 1750, 2000, 2250, 2750}` の 1 箇所で持つ。ボタンも対局もこの表を参照するため、表示と実際の HP は食い違わない。難易度名は `NpcPersonality` の `Expert` だけを使い、`Balanced`（標準）・`Aggressive`（大役）・`Careful` は内部互換として残るが画面には出さない。
 
-`Expert` の相手は、残り振り直し回数の全出目を確率付きで列挙する有限ダイスの厳密方針（252 の目のヒストグラム、462 の保持、4368 の遷移を 1 度だけ生成し、DP を 2 回通す）で役と保持を選ぶ。振り直しは 2 回（前ラウンドのヤッツィー成立があれば 3 回）。相手の手は人間の投擲前に確定し、役名・点数・実際の 5 出目を最初から公開し、人間の投擲や保持を見ても変えない。
+`Expert` の相手は、残り振り直し回数の全出目を確率付きで列挙する有限ダイスの厳密方針（252 の目のヒストグラム、462 の保持、4368 の遷移を 1 度だけ生成し、DP を 2 回通す）で役と保持を選ぶ。振り直しは 2 回（前ラウンドのヤッツィー成立があれば 3 回）。相手の手は人間の投擲前に確定し、役名・点数・実際の 5 出目を最初から公開し、人間の投擲や保持を見ても変えない。相手が負傷しているときは、停止して残す振り直し 1 回を 40 の回復価値として期待値に含める。満 HP では回復価値が 0 なので、従来の得点だけの方針と同じになる。
 
 **根拠**: `Core/ScoreDuel.cs`（`NpcHpByTier`, `NpcHpForDifficulty`, `StartingHp`, `PrepareNpcTurn`, `NpcPersonality`）, `Core/ScoreHoldPolicyExact.cs`, `Presentation/GameFlow.ScoreDuel.cs`（`SDOpponentProfiles`, `SDSelectOpponent`）
 
@@ -206,13 +216,19 @@
 | ダイスの間隔 | 64px（`SlotSpacing`） |
 | 接触時の 2 手の間隔 | 2px（`BodyGap`） |
 | 押し込み量 | 22px（`PushDistance`） |
-| 抜け量 | 80px（`DeflectDistance`） |
+| 負け側の散開距離 | 基準 150px（`SweepDistance`）。中央のダイスが最も近く 0.85〜1.29 倍で散開し、強さ段階で最大 +18% |
+| 負け側の回転 | ±540度（`SweepSpin`、位置で逆向きに交互） |
+| 負け側の散開方向 | 終始画面右。上下に `SweepFan`（0.55）で扇状に開く |
+| 負け側の散開開始 | 押し込み完了（0.44秒）。中央のダイスから 0.025秒刻みで遅れて飛ぶ（`SweepStagger`） |
+| 引き分けの跳ね返り | 14px（`TieBounce`、勝敗なしで両手が接触点から離れる量） |
 | 暗幕の濃さ | 0.55（`LoadingDim`） |
 | 暗幕のフェード | 0.08 秒（`DimFadeTime`） |
 | 暗幕の並び | `OverlaySortOrder = 500` |
 | ダイスの並び | `DieSortOrder = 510`（暗幕より上） |
 
-標準の演出では、0.12 秒から移動を始め、0.24 秒に接触し、勝ち側は相手側へ 22px 押し込み、負け側は薄くなる。勝ち側の手は 0.54 秒から相手の HP へ向かい、0.64 秒に到達する。勝敗なしでは両手をそれぞれ 36px 抜き合わせる。
+標準の演出では、0.12 秒から移動を始め、0.24 秒に接触する。勝ち側は 0.28〜0.44 秒で相手側へ 22px 押し込み、押し込みの完了した 0.44 秒から相手のダイスを薙ぎ払う。負け側の 5 ダイスはそれぞれ個別に、中央のダイスから順に画面右方向へ扇状に散開して回転しながら飛び去り、0.64 秒までに消える。勝ち側の 5 ダイスは一直線の塊のまま 0.54 秒から相手の HP へ向かい、0.64 秒に到達する。勝敗なしでは両手が接触点へ同じだけ押し込み、`TieBounce` で軸方向へ 14px ずつ弾かれ、0.44 秒に元の接触間隔へ戻って止まる。左右へ滑らせない（旧 `DeflectDistance` の横スライドは廃止）。
+
+衝撃の輪・放射線・閃光は到達先にだけ描く。勝ち側があれば到達する HP の位置、引き分けなら中央の接触点である。勝敗と無関係に画面中央へ固定で出るリングは描かない（中央リングは 2026-10-20 に削除）。
 
 暗幕は `LoadingDim` で 0.55 の黒を敷く。標準演出の暗幕は開始時に 0.08 秒でフェードインし、全体終了前の 0.10 秒で消える。ダイスは `DieSortOrder = 510` の Canvas で暗幕より上に描く。
 
@@ -228,12 +244,12 @@
 
 | 条件 | フォント |
 | --- | --- |
-| 50 未満 | 60 |
-| 50 以上 100 未満 | 64 |
-| 100 以上 130 未満 | 72 |
-| 130 以上 | 80 |
+| 150 未満 | 60 |
+| 150 以上 350 未満 | 64 |
+| 350 以上 600 未満 | 72 |
+| 600 以上 | 80 |
 
-確定前の予告数字は 64 に固定し、約束の数字が踊らないようにする。相手の予告数字は 50 である。HP バーは厚さ 36 で、減少は 0.85 秒かけて書き換える。単体戦では 0.85 秒の減少は勝ち側の手が相手の HP へ到達する `ContactTime = 0.64` の後に始まる。行の形式は「あなた 300/300 −35」「相手 250/250 −35」の 1 行で、被害だけを `SDDamageInk`(193,39,45) の赤で示す。
+確定前の予告数字は 64 に固定し、約束の数字が踊らないようにする。相手の予告数字は 50 である。HP バーは厚さ 36 で、単体戦とオンラインが共通の `HealthPresentation` を通る。1 ラウンドの表示は「回復 → 被害」の 2 段階で、`HitStopEnd = 0.28` から `ContactTime = 0.64` までに回復後の値へ上がり、`ContactTime` から `HealthPresentation.End = 1.24` までに被害後の値へ下がる。`CollisionTime = 0.24` ではまだ HP は動かない。行の形式は「あなた 1500/1500 +40 −35」「相手 1250/1250 −35」の 1 行で、回復を `SDHealInk`(27,91,64) の緑、被害を `SDDamageInk`(193,39,45) の赤で示す。ただし表示するのは今いる段階の数字だけであり、回復中は緑の `+N` だけ、被害中は赤の `−M` だけを出し、両方を同時には並べない。回復が 0 のときは緑の数字を出さない。バーは回復分を含む途中値を通るため、被害が回復より小さい場合は開始値より高い位置で止まる。予告のゴーストは回復を含む最終 HP を指し、正味で増えるときは緑、減るときは赤で描く。
 
 役成立の演出は役ごとの段階で規模を変える。成立の判定は攻撃の前に、手が揃った時点で行い、その演出を出す。
 
@@ -245,7 +261,9 @@
 | フォーカインド・大ストレート | 3 | 0.84 / 0.30 | 19 |
 | ヤッツィー | 4 | 1.02 / 0.30 | 28 |
 
-**根拠**: `Presentation/SharedAttackPresenter.cs`（`Duration`, `LoadingEnd`, `CollisionTime`, `HitStopEnd`, `PushEnd`, `BreakthroughEnd`, `ContactTime`, `RecoilStart`, `DisplaySize`, `SlotSpacing`, `BodyGap`, `PushDistance`, `DeflectDistance`, `LoadingDim`, `DimFadeTime`, `OverlaySortOrder`, `DieSortOrder`, `Begin`, `Sample`, `Reset`, `ApplyReduced`, `ComputePose`, `RestoreAll`）, `Presentation/GameFlow.ScoreDuelImpact.cs`（`SDAnimateImpactPresentation`）, `Presentation/GameFlow.ScoreDuel.cs`（`SDScoreFontFor`, `SDRefresh`, `SDBuildHudDetails`）, `Presentation/GameFlow.ScoreDuelEffects.cs`（`SDPlayHandEffects`, `SDHandEffectTier`）, `Presentation/GameFlow.ScoreDuelLayout.cs`（`SDHealthLine`, `SDDamageInk`, `SDAnimateHpLoss`）, `Presentation/GameFlow.ScoreDuelGuides.cs`（`SDGuideX`, `SDTickGestureGuides`, `SDDrawGestureGuide`）, `Tests/PlayMode/ScoreDuelFeedbackTests.cs`（`TheCentralNumeralSwellsWithTheScore`）
+エフェクトの描画は `IScoreEffectSurface`（線・輪・楕円・消去）を境に、判定側の進行から切り離してある。いつ・どの役で・どのダイスに何を出すかは `SharedAttackPresenter` と `ScoreFormationPresenter` が持ち、境界は図形だけを運ぶ。実際に描く実装は `ScoreHandEffectGraphic` で、`UiFactory.AddVertexGraphic<T>` が生成する。この生成は CanvasRenderer を先に確保して生存を確かめる。uGUI は Graphic の CanvasRenderer を最初の再構築時に遅延生成するが、自作 Graphic 子クラスではその遅延生成が既に破棄された renderer を返すことがあり、Graphic がそれを保持したままだと以後の全再構築が `canvasRenderer == null` の早期 return に入り、メッシュが一切描かれない。組み込みの `Image` とプレイヤービルドはこの経路を通らないため、エディタ実行で自作の線・輪・衝撃波だけが消え、ダイスと数字は残る。生成側で先行確保し、破棄された場合は一度だけ作り直す。エフェクト用 Graphic は入力対象にしない（`raycastTarget = false` を生成側で設定する）。
+
+**根拠**: `Presentation/SharedAttackPresenter.cs`（`Duration`, `LoadingEnd`, `CollisionTime`, `HitStopEnd`, `PushEnd`, `BreakthroughEnd`, `ContactTime`, `RecoilStart`, `DisplaySize`, `SlotSpacing`, `BodyGap`, `PushDistance`, `TieBounce`, `SweepDistance`, `SweepSpin`, `SweepFan`, `SweepStagger`, `LoadingDim`, `DimFadeTime`, `OverlaySortOrder`, `DieSortOrder`, `Begin`, `Sample`, `Reset`, `ApplyReduced`, `ComputePose`, `SweepProgress`, `SweepScatter`, `SweepSpinDegrees`, `RestoreAll`）, `Presentation/ScoreEffectSurface.cs`（`IScoreEffectSurface`）, `Presentation/UiFactory.cs`（`AddVertexGraphic`）, `Presentation/GameFlow.ScoreDuelEffects.cs`（`SDPlayHandEffects`, `SDHandEffectTier`, `ScoreHandEffectGraphic`）, `Presentation/GameFlow.ScoreDuelImpact.cs`（`SDAnimateImpactPresentation`）, `Presentation/GameFlow.ScoreDuel.cs`（`SDScoreFontFor`, `SDRefresh`, `SDBuildHudDetails`）, `Presentation/GameFlow.ScoreDuelLayout.cs`（`SDHealthLine`, `SDDamageInk`, `SDAnimateHpLoss`）, `Presentation/GameFlow.ScoreDuelGuides.cs`（`SDGuideX`, `SDTickGestureGuides`, `SDDrawGestureGuide`）, `Tests/PlayMode/ScoreDuelFeedbackTests.cs`（`TheCentralNumeralSwellsWithTheScore`）, `Tests/PlayMode/SharedAttackPresenterTests.cs`（`LoserDiceAreSweptAwayWhileTheWinningHandStrikesTheHp`）, `Tests/PlayMode/EffectStrokeRenderingTests.cs`（`TheFactoryStrokes_ReachTheRenderedPixels`, `APlainSpriteImage_RendersThroughTheSamePath`）
 
 ## 8. キャリー（保存枠）
 
@@ -312,7 +330,7 @@
 | メッセージ | `parva.duel.v1.hello` / `welcome` / `command` / `snapshot`、最大 24576 |
 | 切断 | 進行を止め、残った側に中断を表示する。自動再接続・ホスト移譲は行わない |
 
-規則は CPU 戦と同じである。1 ラウンドに各自 2 回振り直し（ヤッツィー成立の次ラウンドは 3 回、`MaxRerolls = 3`）、役と持越（各自 1 回）を提出し、双方の提出後に同時ダメージと勝敗を確定する。チャンスの入れ替えは CPU 戦と同じ XOR である。同時 KO は丸める前の残 HP を比較し、等しければ引き分けとする。
+規則は CPU 戦と同じである。1 ラウンドに各自 2 回振り直し（ヤッツィー成立の次ラウンドは 3 回、`MaxRerolls = 3`）、役と持越（各自 1 回）を提出し、双方の提出後に同時ダメージと勝敗を確定する。確定時に使わなかった振り直しは 1 回につき 40 回復し、被害を適用する前にその席の最大 HP で止める。チャンスの入れ替えは CPU 戦と同じ XOR である。同時 KO は丸める前の残 HP を比較し、等しければ引き分けとする。
 
 公開の段階は次のとおり。ラウンド開始の初回出目は両者へ公開し、振り直しの最中は相手の出目を開始時の値で伏せ、双方が振り直しを終えた時点で最終の出目をそろって公開する。提出した役・得点・持越と、その役を使った事実は双方の提出まで相手向けスナップショットから隠す。
 
@@ -320,7 +338,7 @@
 
 ダイスの接触から相手の HP へ抜けるまでの攻撃演出も、シングルと同じ `SharedAttackPresenter` を共有する。`Duration = 0.90` 秒の段階（`LoadingEnd` 0.12、`CollisionTime` 0.24、`HitStopEnd` 0.28、`PushEnd` 0.44、`BreakthroughEnd` 0.54、`ContactTime` 0.64、`RecoilStart` 0.70）を持ち、暗幕は 0.55、ダイスは暗幕の上（`OverlaySortOrder = 500` / `DieSortOrder = 510`）に並ぶ。控えめ設定では移動せず、接触の 0.24 秒以降に中央の静止した接触線だけを出す。単体戦と同じく、攻撃演出の `Active` は `Reset` まで真のままで、`Sample(Duration)` を一度通しただけでは終わらない。`Reset` で両手の位置・回転・拡大・Canvas・`CanvasGroup` を元へ戻す。
 
-オンラインの HP 表示は着弾の 0.64 秒から終了の 0.90 秒までの 0.26 秒で減少する。成立役と振り直しもシングルと同じ `ScoreFormationPresenter`、`RollStagger`、`RollScramble` を使う。
+オンラインの HP 表示も単体戦と同じ `HealthPresentation` と `SDApplyHealthFrame` を使う。着弾前の 0.28〜0.64 秒にスナップショットの `heal` で回復し、0.64〜1.24 秒に `damage` で減る。行は今いる段階の数字だけを出し、回復中は緑の `+N`、被害中は赤の `−M` を示す。自分の席では、まだ確定していないラウンドでも残り振り直し×40 の回復プレビューを緑で出す。相手の振り直しは解決まで伏せるため、相手の回復プレビューは出さない。成立役と振り直しもシングルと同じ `ScoreFormationPresenter`、`RollStagger`、`RollScramble` を使う。
 
 振り直し中でも役・持越を選択し、下フリックで自分の振り直しを終了して攻撃を予約できる。相手も振り直しを終えた時点で予約した宣言を送る。右クリック／Spaceで振り直し、1〜5で保持、横ドラッグで保持をまとめて切り替える。明示的な振り直し終了ボタンは表示しない。
 
@@ -355,11 +373,12 @@
 
 | 種別 | 証跡 | 結果 |
 | --- | --- | --- |
-| EditMode 全回帰 | `logs/validation-editmode-20261018-125618-395.xml` | 158/158 成功・失敗 0 |
-| PlayMode 全回帰 | `logs/validation-playmode-20261018-125642-861.xml` | 103/103 成功・失敗 0 |
-| 実行版スモーク | `logs/batch-20261018i/smoke/player-smoke.json` | passed=true・445 チェック・errors なし |
-| 実行環境 | 同スモーク | Unity 6000.3.25f1・Direct3D11・version 0.10.0 |
-| 画面 PNG | `logs/batch-20261018i/smoke/*.png`、`logs/batch-20261018i/title-bottom.png` | タイトル下段・4 段階の被害・持越・練習・結果を含む |
+| EditMode 全回帰 | `logs/validation-editmode-20261021-133315-792.xml` | 164/164 成功・失敗 0 |
+| PlayMode 全回帰 | `logs/validation-playmode-20261021-133332-799.xml` | 137/137 成功・失敗 0 |
+| エディタ実行スモーク | `logs/editor-smoke-20261021-135149-483/player-smoke.json` | passed=true・388 チェック・errors なし |
+| Windows ビルド | `Builds/Windows-20261021-135452-923/build-report.json` | Succeeded・errors 0 |
+| 実行環境 | 同スモーク | Unity 6000.3.25f1・Direct3D11・version 0.2.4 |
+| 画面 PNG | `logs/editor-smoke-20261021-135149-483/*.png` | タイトル・HP の回復／被害・攻撃演出・持越・練習・結果を含む |
 
 主な確認と対応する自動テストは次のとおり。
 
@@ -367,6 +386,8 @@
 | --- | --- |
 | 版号「Ver.0.1」と下段の位置 | `ScoreDuelFeedbackTests.TheTitleNamesItsBuild` |
 | 得点数字の段階（60/64/72/80）と予告の 64 固定 | `ScoreDuelFeedbackTests.TheCentralNumeralSwellsWithTheScore` |
+| 出目合計×倍率の内訳とヤッツィー 900 固定 | `ScoreDuelTests.EveryOrderedHandUsesTheDocumentedMultiplierAndDamagePreservesTheScoreDifference`, `ScoreDuelFeedbackTests.VisibleCategoryButtonsShowLegalUnformedChoices_AndUpdateTheActualForecast` |
+| 引き分けが横へ滑らず軸方向で弾かれること | `SharedAttackPresenterTests.Tie_NeverReportsAWinnerOrImpact` |
 | 実被害 4 段階の幾何と原状復帰 | `ScoreDuelFeedbackTests.FourOutgoingDamageTiersDrawDifferentContactGeometry_AndRecoverOriginalDice` |
 | 発射のため・振り・卓の揺れ | `ScoreDuelFeedbackTests.TheLaunchCocksBackThenWhipsAndTheBigScoresShakeTheTable` |
 | 持越棚の 5 個すべての輪と外径 25 | `ScoreDuelFeedbackTests.ArmedCarryRackRingsEveryDieAsKept` |
@@ -377,12 +398,18 @@
 | 練習が本番の対局を変えないこと | `ReleaseExperienceTests.PracticeTeachesSelectionAndRealDamage_WithoutMutatingTheLiveMatch` |
 | ホイールの 1 ノッチ循環と使用済みの除外 | `ScoreDuelFeedbackTests.WheelMovesOneRolePerNotchInBothDirections_Wraps_AndRefreshesTheForecast`, `ScoreDuelFeedbackTests.WheelSkipsAUsedRole_AndCannotChangeTheChoiceDuringDragRollCommitOrTitle` |
 | 控えめ設定の拡大回避と即時復帰 | `ScoreDuelFeedbackTests.ReducedMotionAvoidsEnlargement_AndRerollAndModalResetEffectsImmediately` |
-| HP バー 1 行の赤い被害 | `ScoreDuelReadabilityTests.HpDropIsNamedInRedInsideTheDrainingBar` |
+| 振り直し温存の回復（確定時・上限・両者・NPC） | `ScoreDuelTests.UnspentRerollsHealBeforeDamageAndCapAtTheMaximum`, `ScoreDuelTests.SpendingEveryRerollForgoesTheHeal`, `ScoreDuelTests.YahtzeeBonusAddsAThirdHealTheNextRound`, `ScoreDuelTests.NpcHealUsesItsOwnUnspentRerollsBeforeDamage`, `VersusDuelTests.KeptRerollsRestoreHealthForBothSeatsBeforeDamage` |
+| NPC が負傷時に残り振り直しの回復を期待値へ入れること | `ScoreDuelTests.ExactPolicyKeepsAFullHouseWithOneRerollButChasesFourWithTwo` |
+| HP バーの回復 → 被害の 2 段階と、各段階の緑／赤 | `ScoreDuelReadabilityTests.HealthBarNamesHealFirstThenTheDropInTheirOwnBeats` |
+| HP が動き終わるまで次ラウンドを開かないこと | `ScoreDuelFeedbackTests.AdvanceWaitsForTheHealthBeatToFinish` |
+| オンラインの自分の回復プレビューと相手の非公開 | `OnlineSharedDuelTests.OwnKeptRerollsPreviewGreenHealWhileOpponentStaysPrivate` |
+| オンラインの回復 → 被害 → 終了後の非表示 | `OnlinePresentationParityTests.OnlineImpactKeepsThePreviewHealUntilContactThenDrains` |
 | 難易度 5 種の初期 HP 表示 | `ScoreDuelReadabilityTests.FiveDifficultiesEachStartWithTheirAdvertisedEnemyHealthOnScreen` |
+| 自作ストロークがエディタ実行でもピクセルに出ること | `EffectStrokeRenderingTests.TheFactoryStrokes_ReachTheRenderedPixels`, `EffectStrokeRenderingTests.APlainSpriteImage_RendersThroughTheSamePath` |
 
 実行版の実 Relay 対戦（2 プロセス）は `docs/TEST_REPORT.md` §21・§23〜§27 に、招待コード参加から勝敗までの状態一致・切断時の中断・`-nographics` の停止解消として記録されている。異なる PC・回線での対人プレイ、初見の操作理解、`-nographics` 以外のヘッドレス環境は未計測である。
 
-**根拠**: `logs/validation-editmode-20261018-125618-395.xml`, `logs/validation-playmode-20261018-125642-861.xml`, `logs/batch-20261018i/smoke/player-smoke.json`, `logs/batch-20261018i/`, `docs/TEST_REPORT.md` §21〜§27
+**根拠**: `logs/validation-editmode-20261021-133315-792.xml`（164/164）, `logs/validation-playmode-20261021-133332-799.xml`（137/137）, `logs/editor-smoke-20261021-135149-483/player-smoke.json`（388 checks, 0 errors）, `logs/editor-smoke-20261021-135149-483/`, `docs/TEST_REPORT.md` §21〜§27
 
 ## 13. 付録 Ver.0.1 調整一覧
 
@@ -405,8 +432,10 @@
 
 | 項目 | `GAME_DESIGN.md` の記述 | コードの実装 |
 | --- | --- | --- |
-| 攻撃演出の段階 | 相手への実被害（`DamageToNpc`）を 30 / 50 / 80 で 4 段階 | `max(DamageToNpc, DamageToPlayer)` を 30 / 50 / 80 で 4 段階（自分が受ける大被害でも段階が上がる） |
-| ヤッツィーの倍率表記 | 役表の成立倍率は「成立時 150 点固定」 | 未成立のヤッツィー欄は ×3 の式（`20＋出目合計`）で計算し、成立時だけ 150 点固定 |
-| チャンスの性質 | 役表の条件は「条件なし」 | 内部では常に成立扱い（マスク 31・得点 `20＋出目合計`）で、どの出目からも選べる |
+| 攻撃演出の段階 | 相手への実被害（`DamageToNpc`）を 250 / 450 / 700 で 4 段階 | `max(DamageToNpc, DamageToPlayer)` を 250 / 450 / 700 で 4 段階（自分が受ける大被害でも段階が上がる） |
+| ヤッツィーの倍率表記 | 役表の成立倍率は「成立時 900 点固定」 | 未成立のヤッツィー欄は ×30 の式（`出目合計×30`）で計算し、成立時だけ 900 点固定 |
+| チャンスの性質 | 役表の条件は「条件なし」 | 内部では常に成立扱い（マスク 31・得点 `出目合計×10`）で、どの出目からも選べる |
 
-**根拠**: `docs/GAME_DESIGN.md` §1〜§3, `Presentation/GameFlow.ScoreDuel.cs`（`SDBuildTitle`）, `Presentation/GameFlow.ScoreDuelImpact.cs`（`SDBeginImpactPresentation`）, `Core/ScoreDuel.cs`（`BuildTable`, `Quarters`）, `ProjectSettings/ProjectSettings.asset`, `logs/batch-20261018i/smoke/player-smoke.json`
+2026-10-20 の得点式置換で `GAME_DESIGN.md` 側も同じ値へ揃えた。上の表は食い違いを見つけた時点の記録として残す。
+
+**根拠**: `docs/GAME_DESIGN.md` §1〜§3, `Presentation/GameFlow.ScoreDuel.cs`（`SDBuildTitle`）, `Presentation/GameFlow.ScoreDuelImpact.cs`（`SDBeginImpactPresentation`）, `Core/ScoreDuel.cs`（`BuildTable`, `Multipliers`）, `ProjectSettings/ProjectSettings.asset`, `logs/batch-20261018i/smoke/player-smoke.json`

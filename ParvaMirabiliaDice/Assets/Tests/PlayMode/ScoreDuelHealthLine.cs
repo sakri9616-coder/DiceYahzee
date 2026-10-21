@@ -15,11 +15,14 @@ namespace ParvaMirabilia.Quality.Tests
     {
         /// <summary>The red a drop is printed in, spelled the way the rich-text tag spells it.</summary>
         public const string Red = "<color=#C1272D>";
+        /// <summary>The deep green a kept-reroll heal is printed in.</summary>
+        public const string Green = "<color=#1B5B40>";
 
-        /// <summary>What a bar must print for this side at this health with this drop.</summary>
-        public static string Expected(string side, int hp, int max, int damage)
+        /// <summary>What a bar must print for this side at this health with this heal and drop.</summary>
+        public static string Expected(string side, int hp, int max, int damage, int heal = 0)
         {
             string line = side + " " + hp + "/" + max;
+            if (heal > 0) line += " " + Green + "+" + heal + "</color>";
             return damage > 0 ? line + " " + Red + "−" + damage + "</color>" : line;
         }
 
@@ -34,6 +37,19 @@ namespace ParvaMirabilia.Quality.Tests
             int damage;
             return int.TryParse(label.text.Substring(start, (end < 0 ? label.text.Length : end) - start).TrimStart('−'), out damage)
                 ? damage : -1;
+        }
+
+        /// <summary>The heal a printed line carries, or 0 when it carries none.</summary>
+        public static int Heal(Text label)
+        {
+            if (label == null || string.IsNullOrEmpty(label.text)) return 0;
+            int open = label.text.IndexOf(Green, System.StringComparison.Ordinal);
+            if (open < 0) return 0;
+            int start = open + Green.Length;
+            int end = label.text.IndexOf('<', start);
+            int heal;
+            return int.TryParse(label.text.Substring(start, (end < 0 ? label.text.Length : end) - start).TrimStart('+'), out heal)
+                ? heal : -1;
         }
     }
 }

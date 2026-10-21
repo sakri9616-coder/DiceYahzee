@@ -22,6 +22,13 @@ namespace ParvaMirabilia.Tests
             Array.Copy(dice, players[player].Dice, dice.Length);
         }
 
+        private static void SetHp(VersusDuel duel, int player, int hp)
+        {
+            var players = (VersusPlayer[])typeof(VersusDuel)
+                .GetField("players", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(duel);
+            typeof(VersusPlayer).GetProperty("Hp").SetValue(players[player], hp);
+        }
+
         /// <summary>Finishes rerolls for both seats and submits one legal role each so the round resolves.</summary>
         private static void SubmitRound(VersusDuel duel, ScoreHandKind kind0, ScoreHandKind kind1,
             int[] dice0 = null, int[] dice1 = null)
@@ -99,6 +106,35 @@ namespace ParvaMirabilia.Tests
             int absorption = Math.Min(score0, score1) / 2;
             Assert.That(duel.LastRound.Damage[0], Is.EqualTo((chance0 != chance1 ? score0 : score1) - absorption));
             Assert.That(duel.LastRound.Damage[1], Is.EqualTo((chance0 != chance1 ? score1 : score0) - absorption));
+        }
+
+        [Test]
+        public void KeptRerollsRestoreHealthForBothSeatsBeforeDamage()
+        {
+            var duel = new VersusDuel(123, 4000); duel.Begin();
+            SetHp(duel, 0, 3000); SetHp(duel, 1, 3000);
+            FinishRerolls(duel);
+            duel.TrySubmit(0, 1, 11, ScoreHandKind.Chance, false, 0, out _);
+            duel.TrySubmit(1, 1, 11, ScoreHandKind.Chance, false, 0, out _);
+            Assert.That(duel.LastRound.HpBefore[0], Is.EqualTo(3000));
+            Assert.That(duel.LastRound.Heal[0], Is.EqualTo(80), "both base rerolls were kept");
+            Assert.That(duel.LastRound.Heal[1], Is.EqualTo(80));
+            Assert.That(duel.Players[0].Hp, Is.EqualTo(3080 - duel.LastRound.Damage[0]));
+            Assert.That(duel.Players[1].Hp, Is.EqualTo(3080 - duel.LastRound.Damage[1]));
+        }
+
+        [Test]
+        public void SpentRerollsDoNotHealInVersus()
+        {
+            var duel = new VersusDuel(124, 4000); duel.Begin();
+            SetHp(duel, 0, 3000); SetHp(duel, 1, 3000);
+            Assert.That(duel.TryReroll(0, 1, 1, 0, out _), Is.True);
+            Assert.That(duel.TryReroll(0, 1, 2, 0, out _), Is.True);
+            Assert.That(duel.TryFinishRerolls(1, 1, 1, 0, out _), Is.True);
+            duel.TrySubmit(0, 1, 11, ScoreHandKind.Chance, false, 0, out _);
+            duel.TrySubmit(1, 1, 11, ScoreHandKind.Chance, false, 0, out _);
+            Assert.That(duel.LastRound.Heal[0], Is.Zero);
+            Assert.That(duel.LastRound.Heal[1], Is.EqualTo(80));
         }
 
         [Test]

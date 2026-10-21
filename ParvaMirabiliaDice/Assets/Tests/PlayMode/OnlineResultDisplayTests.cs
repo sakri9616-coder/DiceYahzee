@@ -62,7 +62,7 @@ namespace ParvaMirabilia.Quality.Tests
         [UnityTest]
         public IEnumerator ChanceDeclarationInvertsTheDamageAndNamesNoCueLine()
         {
-            var duel = new VersusDuel(2027, 60);
+            var duel = new VersusDuel(2027);
             duel.Begin();
             FinishRerolls(duel);
             // The swap itself is stated by the score formula card; no floating cue line returns.
@@ -81,7 +81,7 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(AnyTextNamed("ChanceCue"), Is.False);
 
             // Both sides declaring Chance cancels the swap: each seat takes the other's score.
-            var even = new VersusDuel(2028, 60);
+            var even = new VersusDuel(2028);
             even.Begin();
             FinishRerolls(even);
             Assert.That(even.TrySubmit(0, 1, 11, ScoreHandKind.Chance, false, 0, out _), Is.True);

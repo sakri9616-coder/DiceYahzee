@@ -167,13 +167,14 @@ namespace ParvaMirabilia.Presentation
         }
 
         /// <summary>
-        /// The central numeral keeps 64 as its everyday base and breathes with the score: small
-        /// hands sit at 60, a 100-point clash swells to 72 and the 130+ monsters reach 80, so the
-        /// figure itself carries how much the hit is worth. Only the committed display scales;
-        /// the live preview is pinned to the base, so the promise never dances in size.
+        /// The central numeral keeps 64 as its everyday base and breathes with the score: an
+        /// unformed hand sits at 60, a formed pair or three swells to 64, a full house or four
+        /// reaches 72 and the 600+ monsters (Yahtzee included) reach 80, so the figure itself
+        /// carries how much the hit is worth. Only the committed display scales; the live preview
+        /// is pinned to the base, so the promise never dances in size.
         /// </summary>
         internal static int SDScoreFontFor(int score)
-            => score < 50 ? 60 : score < 100 ? 64 : score < 130 ? 72 : 80;
+            => score < 150 ? 60 : score < 350 ? 64 : score < 600 ? 72 : 80;
 
         private Button SDButton(string name, Transform root, Vector2 pos, Vector2 size,
             string text, int fontSize, UnityAction action, bool primary = false)
@@ -400,7 +401,7 @@ namespace ParvaMirabilia.Presentation
             _sdRules = SDModal("SDRules", "遊び方", new Vector2(980, 660));
             Text steps = SDText("Steps", _sdRules,
                 "① クリック・横ドラッグで残す目を選択します。\n" +
-                "② 右クリックで最大2回振り直せます。\n" +
+                "② 右クリックで最大2回振り直せます。残した1回につき40回復。\n" +
                 "③ クリック・ホイールで役を選択します。\n" +
                 "④ 下にドラッグしてリリースして攻撃。\n" +
                 "⑤ それぞれの役は、一度使うと使えなくなります。",
@@ -408,18 +409,19 @@ namespace ParvaMirabilia.Presentation
             steps.verticalOverflow = VerticalWrapMode.Overflow;
             // The scoring line is the one fact a player checks mid-match, so it is the loudest
             // single line on the panel rather than one sentence inside the instructions.
-            SDText("Formula", _sdRules, "得点＝（20＋出目合計）×倍率、端数切捨て。", 22,
+            SDText("Formula", _sdRules, "得点＝出目合計×倍率", 22,
                 new Vector2(0, 100), new Vector2(900, 36), SDScoreGold);
             SDText("DamageHeading", _sdRules, "ダメージ計算", 16, new Vector2(-330, 56), new Vector2(200, 26), SDPositive, TextAnchor.MiddleLeft);
             SDText("Damage", _sdRules,
                 "ダメージ＝自分の得点−低い得点の半分。\n" +
-                "例：自分56・相手70なら相手へ28・自分へ42。\n" +
+                "例：自分560・相手700なら相手へ280・自分へ420。\n" +
                 "チャンス：ダメージ計算式を反転させます。\n" +
-                "ヤッツィー：次の振りなおし回数+1",
-                14, new Vector2(0, -4), new Vector2(860, 84), SDCream, TextAnchor.UpperLeft);
+                "ヤッツィー：次の振り直し回数+1（最大3回）\n" +
+                "振り直しを残すと1回につき40回復（確定時・最大HPまで）",
+                14, new Vector2(0, -4), new Vector2(860, 100), SDCream, TextAnchor.UpperLeft);
             string[] names = ScoreRules.Names;
-            string[] values = { "同じ目2つ · ×1.5", "ペア2組 · ×2", "同じ目3つ · ×2", "3つ＋2つ · ×2.5",
-                "4連続 · ×2", "同じ目4つ · ×3", "5連続 · ×2.5", "同じ目5つ · 150点", "条件なし · ×1" };
+            string[] values = { "同じ目2つ · ×15", "ペア2組 · ×20", "同じ目3つ · ×20", "3つ＋2つ · ×25",
+                "4連続 · ×20", "同じ目4つ · ×30", "5連続 · ×25", "同じ目5つ · 900点", "条件なし · ×10" };
             for (int i = 0; i < 9; i++)
             {
                 int col = i / 5, row = i % 5;
@@ -763,7 +765,7 @@ namespace ParvaMirabilia.Presentation
 
         private void SDAdvance()
         {
-            if (SDModalOpen || _sdEngine == null || !_sdCommitted || _sdAttackAge >= 0) return;
+            if (SDModalOpen || _sdEngine == null || !_sdCommitted || _sdAttackAge >= 0 || _sdHpAge >= 0) return;
             if (_sdEngine.Outcome != null)
             {
                 SDShowResult();
@@ -907,6 +909,30 @@ namespace ParvaMirabilia.Presentation
             SDApplyHpLines();
         }
 
+        /// <summary>
+        /// Samples the same two-beat health timeline for both bars. The captured pre-round values
+        /// are used as the start, and the receipt owns the heal and damage; this keeps the bar and
+        /// the one-line figure on one clock instead of letting the forecast and the drain disagree.
+        /// </summary>
+        private void SDTickHpPresentation(float age)
+        {
+            if (_sdEngine == null || _sdEngine.LastRound == null) return;
+            ScoreRound round = _sdEngine.LastRound;
+            HealthPresentation.Frame player = HealthPresentation.At(age,
+                Mathf.RoundToInt(_sdPlayerHpFrom), round.PlayerHeal, round.DamageToPlayer, ScoreDuel.StartingHp);
+            HealthPresentation.Frame npc = HealthPresentation.At(age,
+                Mathf.RoundToInt(_sdNpcHpFrom), round.NpcHeal, round.DamageToNpc, _sdEngine.NpcMaxHp);
+            _sdPlayerHpShown = player.Hp;
+            _sdNpcHpShown = npc.Hp;
+            _sdPlayerDamageShown = player.Damage;
+            _sdNpcDamageShown = npc.Damage;
+            _sdPlayerHealShown = player.Heal;
+            _sdNpcHealShown = npc.Heal;
+            SDApplyHpLines();
+            SDApplyHealthFrame(_sdPlayerBar, _sdPlayerLossBand, player, ScoreDuel.StartingHp, SDPlayerColor);
+            SDApplyHealthFrame(_sdNpcBar, _sdNpcLossBand, npc, _sdEngine.NpcMaxHp, SDEnemyColor);
+        }
+
         private void SDOpenSheet()
         {
             if (_sdEngine == null || _sdRolling) return;
@@ -1033,14 +1059,15 @@ namespace ParvaMirabilia.Presentation
                 _sdHitAge += dt;
                 _sdHit.rectTransform.localScale = Vector3.one * (_sdReducedMotion ? 1 : Mathf.Lerp(1.17f, 1, Mathf.Clamp01(_sdHitAge * 4)));
             }
-            if (_sdHpAge >= 0 && _sdEngine != null && !SDModalOpen && (_sdAttackAge < 0 || _sdAttackAge >= SharedAttackPresenter.ContactTime))
+            if (_sdHpAge >= 0 && _sdEngine != null && !SDModalOpen)
             {
                 _sdHpAge += dt;
-                float t = Mathf.Clamp01(_sdHpAge / .85f);
-                float eased = 1 - (1 - t) * (1 - t);
-                SDSetHp(Mathf.Lerp(_sdPlayerHpFrom, _sdEngine.PlayerHp, eased), Mathf.Lerp(_sdNpcHpFrom, _sdEngine.NpcHp, eased));
-                SDShowHpDeltas(1 - t);
-                if (t >= 1) { _sdHpAge = -1; SDShowHpDeltas(0); }
+                SDTickHpPresentation(_sdHpAge);
+                if (_sdHpAge >= HealthPresentation.End)
+                {
+                    _sdHpAge = -1;
+                    SDTickHpPresentation(HealthPresentation.End);
+                }
             }
             if (Input.GetKeyDown(KeyCode.Escape)) SDHandleShortcut(KeyCode.Escape);
             if (Input.GetMouseButtonDown(0)) SDHandleTableClick(Input.mousePosition);

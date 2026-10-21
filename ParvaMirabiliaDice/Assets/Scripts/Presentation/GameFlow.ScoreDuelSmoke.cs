@@ -309,18 +309,30 @@ namespace ParvaMirabilia.Presentation
                     _sdEngine.LastRound.NpcScore == receipt.NpcScore &&
                     _sdEngine.PlayerHp == proof.PlayerHp && _sdEngine.NpcHp == proof.NpcHp &&
                     SDArrayEquals(_sdEngine.NpcDice, receipt.NpcDice), "round " + _sdEngine.Round + " matches the independent core receipt");
-                SmokeCheck(SDSmokeDamageAgrees(_sdNpcHpLabel, receipt.DamageToNpc) &&
-                    SDSmokeDamageAgrees(_sdPlayerHpLabel, receipt.DamageToPlayer) &&
-                    _sdEngine.LastRound.DamageToNpc == forecast.DamageToNpc && _sdEngine.LastRound.DamageToPlayer == forecast.DamageToPlayer,
-                    "round " + _sdEngine.Round + " retires both forecasts from the bars for the clash that actually lands");
                 SmokeCheck(_sdEngine.LastRound.DamageToPlayer == forecast.DamageToPlayer &&
                     _sdEngine.LastRound.DamageToNpc == forecast.DamageToNpc,
                     "round " + _sdEngine.Round + " uses exactly the displayed clash damage");
-                yield return new WaitForSecondsRealtime(.95f);
+                // The shared health timeline heals first, then damages. Check the green figure in
+                // its own beat, then the red figure after contact, so a missing phase cannot pass.
+                yield return new WaitForSecondsRealtime(.45f);
+                if (receipt.PlayerHeal > 0 || receipt.NpcHeal > 0) SmokeCapture("hp-heal");
+                if (receipt.PlayerHeal > 0)
+                    SmokeCheck(SDSmokeLineHeal(_sdPlayerHpLabel) == receipt.PlayerHeal,
+                        "round " + _sdEngine.Round + " names your kept-reroll heal in green");
+                if (receipt.NpcHeal > 0)
+                    SmokeCheck(SDSmokeLineHeal(_sdNpcHpLabel) == receipt.NpcHeal,
+                        "round " + _sdEngine.Round + " names the opponent's kept-reroll heal in green");
+                yield return new WaitForSecondsRealtime(.5f);
+                SmokeCheck(SDSmokeDamageAgrees(_sdNpcHpLabel, receipt.DamageToNpc) &&
+                    SDSmokeDamageAgrees(_sdPlayerHpLabel, receipt.DamageToPlayer),
+                    "round " + _sdEngine.Round + " retires both forecasts from the bars for the clash that actually lands");
                 SDSmokeCheckRightScoreChoices();
                 SmokeCapture("round-" + _sdEngine.Round + "-result");
                 if (_sdEngine.Round == 1) SmokeCapture("full-width-table-overlay-cards-used-enemy-role");
                 if (_sdEngine.Outcome != null) break;
+                // The attack is done at 0.90, but the health beat runs to 1.24. The next
+                // round must wait for the bar to settle instead of opening under the drop.
+                yield return new WaitForSecondsRealtime(.35f);
                 proof.NextRound(); proof.Roll();
                 SDSmokeTableClick();
                 SmokeCheck(_sdRolling, "round " + _sdEngine.Round + " begins with the same throw animation");
@@ -365,6 +377,7 @@ namespace ParvaMirabilia.Presentation
                 }
             }
             SmokeCheck(_sdEngine.Outcome != null && (_sdEngine.PlayerHp == 0 || _sdEngine.NpcHp == 0), "the match finishes by a knockout");
+            yield return new WaitForSecondsRealtime(.35f);
             SDSmokeTableClick();
             SmokeCheck(_sdResult.gameObject.activeSelf, "the match leads to the result screen");
             SmokeCapture("match-result");
@@ -415,9 +428,10 @@ namespace ParvaMirabilia.Presentation
                 _sdEngine.PlayerHp == Mathf.Max(0, oldPlayerHp - savedForecast.DamageToPlayer) &&
                 _sdEngine.NpcHp == Mathf.Max(0, oldNpcHp - savedForecast.DamageToNpc), "the completed carry pull exchanges the exact displayed normal damage once");
             yield return new WaitForSecondsRealtime(.37f);
-            SmokeCapture("hp-damage");
             yield return new WaitForSecondsRealtime(.58f);
+            SmokeCapture("hp-damage");
             SmokeCapture("saved-exchange");
+            yield return new WaitForSecondsRealtime(.35f);
             SDSmokeTableClick();
             yield return new WaitForSecondsRealtime(.95f);
             bool holdsMatch = true;
@@ -438,7 +452,9 @@ namespace ParvaMirabilia.Presentation
             bool impactWasCommitted = _sdCommitted; _sdCommitted = true;
             float savedAttackAge = _sdAttackAge;
             float? savedAttackOverride = _sdSmokeAttackAgeOverride;
-            int[] ownWinScores = { 90, 40, 60 }, enemyWinScores = { 40, 90, 60 };
+            // New-scale scores so the punch tiers actually differ across the three signs:
+            // own win reaches tier 3, enemy win sits at tier 0, the tie at tier 1.
+            int[] ownWinScores = { 900, 200, 400 }, enemyWinScores = { 200, 900, 400 };
             string[] outcomes = { "own-win", "enemy-win", "tie" };
             float[] phases = { .10f, .24f, .40f, .64f, .82f };
             string[] phaseNames = { "loading", "collision", "push", "strike", "recovery" };
@@ -486,6 +502,25 @@ namespace ParvaMirabilia.Presentation
                         }
                         SDRefreshDieLabelsVisibility();
                         SmokeCapture("attack-presenter-" + outcomes[outcome] + "-" + phaseNames[phase]);
+                        // The canonical shots sit before the sweep starts (0.44) and after it has
+                        // finished (0.64), so the sweep itself would never appear in a capture.
+                        // Freeze it half-way for the own win and prove the losing dice travel to
+                        // the right instead of fading in place.
+                        if (outcome == 0 && phase == 2)
+                        {
+                            float[] before = new float[5];
+                            for (int i = 0; i < 5; i++)
+                                before[i] = _sdNpcDieTransforms[i].anchoredPosition.x;
+                            _sdSmokeAttackAgeOverride = SharedAttackPresenter.BreakthroughEnd;
+                            yield return null;
+                            yield return new WaitForEndOfFrame();
+                            int moved = 0;
+                            for (int i = 0; i < 5; i++)
+                                if (_sdNpcDieTransforms[i].anchoredPosition.x - before[i] > 20f) moved++;
+                            SmokeCheck(moved == 5, "the winning hand sweeps all five losing dice to the right");
+                            SDRefreshDieLabelsVisibility();
+                            SmokeCapture("attack-presenter-own-win-sweep");
+                        }
                     }
                     if (outcome == 0) { _sdSmokeAttackAgeOverride = SharedAttackPresenter.Duration + .05f; yield return null; yield return new WaitForEndOfFrame(); SDRefreshDieLabelsVisibility(); SmokeCapture("attack-presenter-own-win-aftermath"); }
                 }
@@ -568,8 +603,8 @@ namespace ParvaMirabilia.Presentation
                 _sdEngine.Intent.Kind == proof.Intent.Kind && _sdEngine.Intent.Score == proof.Intent.Score,
                 "round " + _sdEngine.Round + " preserves the actual dice and fixed NPC intent");
             var offer = ScoreRules.Evaluate(_sdSelectedKind, proof.PlayerDice);
-            float factor = offer.IsFormed ? ScoreRules.MultiplierQuarters(_sdSelectedKind) / 4f : 1f;
-            string formula = "(20 + " + (offer.BaseScore - 20) + ") ×" + factor.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+            int factor = offer.IsFormed ? ScoreRules.Multiplier(_sdSelectedKind) : ScoreRules.UnformedMultiplier;
+            string formula = offer.BaseScore + " × " + factor.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var forecast = proof.Forecast(_sdSelectedKind);
             SmokeCheck(_sdScoreNumber.text == offer.Score.ToString() && _sdBreakdown.text == formula &&
                 _sdNpcScoreNumber.text == proof.Intent.Score.ToString() &&
@@ -707,6 +742,18 @@ namespace ParvaMirabilia.Presentation
             int damage;
             return int.TryParse(label.text.Substring(start, (end < 0 ? label.text.Length : end) - start), out damage) ? damage : -1;
         }
+        /// <summary>The heal a health bar prints, read back out of the green tag.</summary>
+        private static int SDSmokeLineHeal(Text label)
+        {
+            if (label == null) return 0;
+            int tag = label.text.IndexOf(SDHealTag, System.StringComparison.Ordinal);
+            if (tag < 0) return 0;
+            int start = tag + SDHealTag.Length + 1;   // the plus sign is a glyph, not part of the figure
+            int end = label.text.IndexOf('<', start);
+            int heal;
+            return int.TryParse(label.text.Substring(start, (end < 0 ? label.text.Length : end) - start), out heal) ? heal : -1;
+        }
+
         /// <summary>The health a printed line shows, or -1 when the line does not read as side + hp/cap.</summary>
         private static int SDSmokeLineHealth(Text label)
         {

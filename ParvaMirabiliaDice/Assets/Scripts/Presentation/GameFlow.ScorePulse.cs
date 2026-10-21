@@ -15,7 +15,13 @@ namespace ParvaMirabilia.Presentation
         private ScorePulse _sdOwnScorePulse, _sdEnemyScorePulse;
         private ScorePulse _onlineOwnScorePulse, _onlineEnemyScorePulse;
 
-        private static int SDScorePulseTier(int score) => score < 50 ? 0 : score < 100 ? 1 : score < 130 ? 2 : 3;
+        /// <summary>
+        /// Score bins shared by the score pulse, the attack punch and the online adapter, so an
+        /// identical round looks identical everywhere. Under the 出目合計×倍率 scale a formed
+        /// pair reaches 1 (300+), a three or full house 2 (550+) and a four or Yahtzee 3 (800+).
+        /// </summary>
+        internal static int SDScorePulseTier(int score)
+            => score < 300 ? 0 : score < 550 ? 1 : score < 800 ? 2 : 3;
 
         private static void SDObserveScorePulse(Text label, ref ScorePulse pulse, int score)
         {

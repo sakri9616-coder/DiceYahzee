@@ -13,7 +13,7 @@ namespace ParvaMirabilia.Presentation
     internal sealed class ScoreFormationPresenter
     {
         private readonly RectTransform _root;
-        private readonly ScoreHandEffectGraphic _geometry;
+        private readonly IScoreEffectSurface _geometry;
         private readonly RectTransform[] _dice;
         private readonly System.Func<bool> _reducedMotion;
         private readonly Vector3[] _baseScale = new Vector3[5];
@@ -40,8 +40,7 @@ namespace ParvaMirabilia.Presentation
             _dice = dice;
             _reducedMotion = reducedMotion;
             _root = UiFactory.CreateStretch("HandEffects", parent);
-            _geometry = _root.gameObject.AddComponent<ScoreHandEffectGraphic>();
-            _geometry.raycastTarget = false;
+            _geometry = UiFactory.AddVertexGraphic<ScoreHandEffectGraphic>(_root.gameObject);
             for (int i = 0; i < 5; i++)
             {
                 if (_dice[i] == null) continue;
@@ -96,7 +95,7 @@ namespace ParvaMirabilia.Presentation
         }
 
         internal RectTransform Root => _root;
-        internal ScoreHandEffectGraphic Geometry => _geometry;
+        internal IScoreEffectSurface Geometry => _geometry;
         internal Image TraceHead => _traceHead;
         internal Image[] Sparks => _sparks;
         internal bool Active => _active;

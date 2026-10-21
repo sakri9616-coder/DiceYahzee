@@ -36,16 +36,28 @@ namespace ParvaMirabilia.Presentation
 
         private void BeginPlayerSmokeIfRequested()
         {
-            if (Application.isEditor) return;
-            string[] args = Environment.GetCommandLineArgs();
-            string requestedOutput = null;
-            for (int i = 0; i + 1 < args.Length; i++)
-                if (args[i] == "-arcaneSmokeOutput") requestedOutput = Path.GetFullPath(args[i + 1]);
+            string requestedOutput = ResolveRequestedSmokeOutput();
             if (requestedOutput == null) return;
             _smokeOutput = requestedOutput;
             Directory.CreateDirectory(_smokeOutput);
             Application.logMessageReceived += ObserveSmokeError;
             StartCoroutine(SmokeGuard(ScoreDuelPresentationActive ? ScoreDuelPlayerSmoke() : PlayerSmoke()));
+        }
+
+        private static string ResolveRequestedSmokeOutput()
+        {
+            // Replayed players pass the command-line flag. Editor play sessions cannot pass
+            // flags, so the launcher menu item publishes the requested directory through an
+            // environment variable instead. With neither set, ordinary startup in build and
+            // editor stays smoke-free exactly as before.
+            string[] args = Environment.GetCommandLineArgs();
+            for (int i = 0; i + 1 < args.Length; i++)
+                if (args[i] == "-arcaneSmokeOutput")
+                    return Path.GetFullPath(args[i + 1]);
+            string fromLauncher = Environment.GetEnvironmentVariable("ArcaneSmokeOutput");
+            if (!string.IsNullOrEmpty(fromLauncher))
+                return Path.GetFullPath(fromLauncher);
+            return null;
         }
 
         private void ObserveSmokeError(string message, string stack, LogType type)

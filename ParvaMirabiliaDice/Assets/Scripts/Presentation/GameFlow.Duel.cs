@@ -39,7 +39,7 @@ namespace ParvaMirabilia.Presentation
             leather.uvRect = new Rect(0, 0, 2.5f, 1.5f);
             leather.raycastTarget = false;
             var stars = UiFactory.CreateRect("CelestialInlay", table.transform, new Vector2(1800, 1100), Vector2.zero);
-            stars.gameObject.AddComponent<ArcaneBackdrop>().raycastTarget = false;
+            UiFactory.AddVertexGraphic<ArcaneBackdrop>(stars.gameObject);
 
             // Opponents read as three illustrated cards with a visual identity and a practical
             // promise, rather than three undifferentiated buttons in a settings menu.

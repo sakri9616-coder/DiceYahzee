@@ -362,6 +362,31 @@ namespace ParvaMirabilia.Presentation
         }
 
         /// <summary>
+        /// Attaches a vertex-built Graphic and makes sure it owns a live CanvasRenderer.
+        ///
+        /// uGUI creates a Graphic's CanvasRenderer lazily on its first rebuild. On a custom
+        /// Graphic subclass that lazy add can hand back a renderer that is already gone; the
+        /// Graphic then caches the dead wrapper, every later rebuild bails out at
+        /// "canvasRenderer == null", and the mesh is never drawn. Built-in Images are unaffected,
+        /// which is why the dice and labels kept rendering in editor play while the stroke rings,
+        /// trail lines and shockwaves vanished. Adding the renderer here, and retrying once when
+        /// the first add is discarded, keeps the mesh path the same in editor play and in player
+        /// builds. Effect graphics are never input targets.
+        /// </summary>
+        public static T AddVertexGraphic<T>(GameObject host) where T : Graphic
+        {
+            var graphic = host.AddComponent<T>();
+            graphic.raycastTarget = false;
+            if (host.GetComponent<CanvasRenderer>() == null)
+            {
+                host.AddComponent<CanvasRenderer>();
+                if (host.GetComponent<CanvasRenderer>() == null)
+                    host.AddComponent<CanvasRenderer>();
+            }
+            return graphic;
+        }
+
+        /// <summary>
         /// A flat panel. It takes the same rounded corner as everything else: rounding the dice
         /// and the buttons while leaving the bars and the result frame square is the kind of
         /// half-applied rule a reader notices without being able to say why.

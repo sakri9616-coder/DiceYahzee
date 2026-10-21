@@ -20,6 +20,7 @@ namespace ParvaMirabilia.Presentation
         // is recomposed from these four values rather than spelling the damage out twice.
         private float _sdPlayerHpShown, _sdNpcHpShown;
         private int _sdPlayerDamageShown, _sdNpcDamageShown;
+        private int _sdPlayerHealShown, _sdNpcHealShown;
         private readonly Image[] _sdHoldMarks = new Image[5];
         // Three slots so a formed Yahtzee's bonus reroll has a home; a normal round hides the third.
         private readonly Image[] _sdRollPips = new Image[3];
@@ -54,6 +55,9 @@ namespace ParvaMirabilia.Presentation
         private static readonly Color SDDamageInk = new Color32(193, 39, 45, 255);
         /// <summary>The same red as a rich-text tag, built once so a per-frame line costs no parsing.</summary>
         private static readonly string SDDamageTag = "<color=#" + ColorUtility.ToHtmlStringRGB(SDDamageInk) + ">";
+        /// <summary>Health restored by kept rerolls reads in a deep green that survives both fills.</summary>
+        private static readonly Color SDHealInk = new Color32(27, 91, 64, 255);
+        private static readonly string SDHealTag = "<color=#" + ColorUtility.ToHtmlStringRGB(SDHealInk) + ">";
 
         private Image SDIcon(string name, Transform parent, string icon, Vector2 position, float size, Color color)
         {
@@ -116,26 +120,28 @@ namespace ParvaMirabilia.Presentation
         }
 
         /// <summary>
-        /// One health readout: side, current health, then the drop that side is taking in red. A
-        /// single centred label carries all of it, so the damage reads as part of this bar's own
-        /// figure instead of as a second numeral parked at the far end of the track.
+        /// One health readout: side, current health, then the health kept rerolls restore in
+        /// green and the drop that side is taking in red. A single centred label carries all of
+        /// it, so both figures read as part of this bar's own result instead of as extra numerals
+        /// parked at the far end of the track.
         /// </summary>
-        private static string SDHealthLine(string side, int hp, int max, int damage)
+        private static string SDHealthLine(string side, int hp, int max, int damage, int heal = 0)
         {
             string line = side + " " + hp + "/" + Mathf.Max(0, max);
+            if (heal > 0) line += " " + SDHealTag + "+" + heal + "</color>";
             return damage > 0 ? line + " " + SDDamageTag + "−" + damage + "</color>" : line;
         }
 
         /// <summary>
-        /// Reprints both health lines from the health currently on screen and the drop each bar
-        /// owes. The forecast and the drain both feed this one line, so neither can leave a stale
-        /// figure behind for the other to contradict.
+        /// Reprints both health lines from the health currently on screen plus the heal and drop
+        /// each bar owes. The forecast and the drain both feed this one line, so neither can leave
+        /// a stale figure behind for the other to contradict.
         /// </summary>
         private void SDApplyHpLines()
         {
             if (_sdEngine == null || _sdPlayerHpLabel == null) return;
-            _sdPlayerHpLabel.text = SDHealthLine("あなた", Mathf.RoundToInt(_sdPlayerHpShown), ScoreDuel.StartingHp, _sdPlayerDamageShown);
-            _sdNpcHpLabel.text = SDHealthLine("相手", Mathf.RoundToInt(_sdNpcHpShown), _sdEngine.NpcMaxHp, _sdNpcDamageShown);
+            _sdPlayerHpLabel.text = SDHealthLine("あなた", Mathf.RoundToInt(_sdPlayerHpShown), ScoreDuel.StartingHp, _sdPlayerDamageShown, _sdPlayerHealShown);
+            _sdNpcHpLabel.text = SDHealthLine("相手", Mathf.RoundToInt(_sdNpcHpShown), _sdEngine.NpcMaxHp, _sdNpcDamageShown, _sdNpcHealShown);
         }
 
         private static Image SDGhost(Image fill)
@@ -158,20 +164,21 @@ namespace ParvaMirabilia.Presentation
 
         private static string SDMultiplier(ScoreHandKind kind, bool formed = true)
         {
-            if (kind == ScoreHandKind.Five && formed) return "150";
-            float multiplier = formed ? ScoreRules.MultiplierQuarters(kind) / 4f : 1f;
-            return "×" + multiplier.ToString("0.##", CultureInfo.InvariantCulture);
+            if (kind == ScoreHandKind.Five && formed) return "900点";
+            int multiplier = formed ? ScoreRules.Multiplier(kind) : ScoreRules.UnformedMultiplier;
+            return "×" + multiplier.ToString(CultureInfo.InvariantCulture);
         }
 
         /// <summary>
-        /// The one-glance tag a role rail prints beside its name: its multiplier, the fixed 150,
-        /// or Chance's reversal, which is named rather than numbered because it scores nothing.
+        /// The one-glance tag a role rail prints beside its name: its multiplier, the fixed 900,
+        /// or Chance's reversal, which is named rather than numbered because it turns the damage
+        /// around rather than adding to it.
         /// </summary>
         private static string SDRailMultiplier(ScoreHandKind kind)
         {
-            if (kind == ScoreHandKind.Five) return "150点";
+            if (kind == ScoreHandKind.Five) return "900点";
             if (kind == ScoreHandKind.Chance) return "逆転";
-            return "×" + (ScoreRules.MultiplierQuarters(kind) / 4f).ToString("0.##", CultureInfo.InvariantCulture);
+            return "×" + ScoreRules.Multiplier(kind).ToString(CultureInfo.InvariantCulture);
         }
 
         /// <summary>
@@ -192,32 +199,36 @@ namespace ParvaMirabilia.Presentation
         private static string SDCalculation(ScoreHandKind kind, int[] dice)
         {
             ScoreOffer offer = ScoreRules.Evaluate(kind, dice);
-            if (kind == ScoreHandKind.Five && offer.IsFormed) return "150";
-            // Chance has no summed contribution beyond the faces; still spell out the base 20
-            // so the ``20 + sum`` shape stays unambiguous across every role.
-            int sum = offer.BaseScore - ScoreRules.BasePoints;
-            string product = SDMultiplier(kind, offer.IsFormed);
-            return "(" + ScoreRules.BasePoints + " + " + sum + ") " + product;
+            if (kind == ScoreHandKind.Five && offer.IsFormed) return "900";
+            int multiplier = offer.IsFormed ? ScoreRules.Multiplier(kind) : ScoreRules.UnformedMultiplier;
+            return offer.BaseScore + " × " + multiplier.ToString(CultureInfo.InvariantCulture);
         }
 
         private void SDRefreshHud()
         {
             if (_sdEngine == null || _sdPlayerHpLabel == null) return;
             bool plan = !_sdRolling && !_sdCommitted && !SDModalOpen;
-            ScoreForecast forecast = _sdCommitted ? new ScoreForecast(_sdEngine.LastRound.PlayerScore, _sdEngine.LastRound.NpcScore, _sdEngine.LastRound.IsSaved, _sdEngine.LastRound.IsReversed) : _sdEngine.Forecast(_sdSelectedKind, _sdSaveArmed);
-            // The drop in a bar's line has one owner at a time: the drain while health is moving,
-            // and the forecast while a role is still being chosen. Both used to write their own
-            // numeral, which is how the bar ended up carrying two different figures at once. The
-            // drain's first frame is age zero, so the forecast holds the line only up to that point.
-            if (_sdHpAge <= 0)
+            ScoreForecast forecast = _sdCommitted ? new ScoreForecast(_sdEngine.LastRound.PlayerScore, _sdEngine.LastRound.NpcScore, _sdEngine.LastRound.IsReversed) : _sdEngine.Forecast(_sdSelectedKind, _sdSaveArmed);
+            // The drop in a bar's line has one owner at a time: the shared health timeline while
+            // health is moving, and the forecast while a role is still being chosen. The timeline
+            // prints only the beat it is in, so a green heal never shares the line with a red drop.
+            if (_sdHpAge < 0)
             {
-                bool showForecast = !_sdRolling && _sdAttackAge < 0;
-                _sdNpcDamageShown = showForecast ? (_sdCommitted ? _sdEngine.LastRound.DamageToNpc : forecast.DamageToNpc) : 0;
-                _sdPlayerDamageShown = showForecast ? (_sdCommitted ? _sdEngine.LastRound.DamageToPlayer : forecast.DamageToPlayer) : 0;
+                bool showForecast = !_sdRolling && _sdAttackAge < 0 && !_sdCommitted;
+                _sdNpcDamageShown = showForecast ? forecast.DamageToNpc : 0;
+                _sdPlayerDamageShown = showForecast ? forecast.DamageToPlayer : 0;
+                // The heal is named next to the damage while the role is chosen, so keeping a
+                // reroll visibly buys health before it is spent.
+                int playerHeal = ScoreRules.HealFor(_sdEngine.PlayerHp, ScoreDuel.StartingHp, _sdEngine.RerollsLeft);
+                int npcHeal = ScoreRules.HealFor(_sdEngine.NpcHp, _sdEngine.NpcMaxHp, _sdEngine.NpcRerollsLeft);
+                _sdNpcHealShown = showForecast ? npcHeal : 0;
+                _sdPlayerHealShown = showForecast ? playerHeal : 0;
                 SDApplyHpLines();
             }
-            SDPlaceGhost(_sdNpcGhost, _sdEngine.NpcHp, _sdEngine.NpcMaxHp, forecast.DamageToNpc, plan);
-            SDPlaceGhost(_sdPlayerGhost, _sdEngine.PlayerHp, ScoreDuel.StartingHp, forecast.DamageToPlayer, plan);
+            int playerHealPreview = ScoreRules.HealFor(_sdEngine.PlayerHp, ScoreDuel.StartingHp, _sdEngine.RerollsLeft);
+            int npcHealPreview = ScoreRules.HealFor(_sdEngine.NpcHp, _sdEngine.NpcMaxHp, _sdEngine.NpcRerollsLeft);
+            SDPlaceGhost(_sdNpcGhost, _sdEngine.NpcHp, _sdEngine.NpcMaxHp, forecast.DamageToNpc, npcHealPreview, plan);
+            SDPlaceGhost(_sdPlayerGhost, _sdEngine.PlayerHp, ScoreDuel.StartingHp, forecast.DamageToPlayer, playerHealPreview, plan);
             if (_sdRerollAllowanceRound != _sdEngine.Round)
             {
                 _sdRerollAllowanceRound = _sdEngine.Round;
@@ -263,40 +274,51 @@ namespace ParvaMirabilia.Presentation
             }
         }
 
-        private static void SDPlaceGhost(Image ghost, int hp, int max, int damage, bool visible)
+        /// <summary>
+        /// Forecasts the final position after both beats. The ghost spans pre-round health to the
+        /// final value, so it includes the kept-reroll heal instead of showing the gross damage as
+        /// if the heal had not happened. A net gain is green; a net loss keeps the warm red.
+        /// </summary>
+        private static void SDPlaceGhost(Image ghost, int hp, int max, int damage, int heal, bool visible)
         {
-            ghost.gameObject.SetActive(visible);
-            if (!visible || max <= 0) return;
-            float end = Mathf.Clamp01((float)hp / max);
-            float start = Mathf.Clamp01((float)(hp - damage) / max);
+            int after = max > 0 ? HealthPresentation.After(hp, heal, damage, max) : hp;
+            bool changed = visible && max > 0 && after != hp;
+            ghost.gameObject.SetActive(changed);
+            if (!changed) return;
+            int low = Mathf.Min(hp, after);
+            int high = Mathf.Max(hp, after);
+            float start = Mathf.Clamp01((float)low / max);
+            float end = Mathf.Clamp01((float)high / max);
             float width = SDHpWidth * (end - start);
             ghost.rectTransform.anchoredPosition = new Vector2(SDHpWidth * start, 0);
             ghost.rectTransform.sizeDelta = new Vector2(width, SDHpThickness);
+            ghost.color = after > hp ? new Color(.48f, .82f, .64f, .65f) : new Color(.86f, .53f, .48f, .65f);
             // Authored at its own width so the forecast cap follows the pill's curve.
             ghost.sprite = SDBarSegmentSprite(width);
         }
 
         /// <summary>
-        /// Names the health each bar is losing inside that same bar while it drains, so the drop is
-        /// a number the reader can name rather than only a shrinking bar. The figure holds steady
-        /// through the drain and leaves with the band once the bar has caught up.
+        /// Applies one sampled <see cref="HealthPresentation.Frame"/> to a bar. Both duel modes
+        /// call this same method so the heal-first/damage-second beat cannot diverge between them.
+        /// </summary>
+        private void SDApplyHealthFrame(Image fill, Image band, HealthPresentation.Frame frame,
+            int maximum, Color baseColor)
+        {
+            SDSetTableHp(fill, frame.Hp, maximum);
+            SDAnimateHpLoss(fill, band, frame.LossFrom, frame.LossTo, maximum, baseColor, frame.LossAlpha);
+        }
+
+        /// <summary>
+        /// Test/legacy hook: samples the damage beat from full emphasis (alpha 1) to settled
+        /// (alpha 0). The live presentation uses the absolute ages in <see cref="HealthPresentation"/>.
         /// </summary>
         private void SDShowHpDeltas(float alpha)
         {
-            if (_sdPlayerHpLabel == null) return;
-            int npcLoss = _sdEngine != null ? Mathf.Max(0, Mathf.RoundToInt(_sdNpcHpFrom) - _sdEngine.NpcHp) : 0;
-            int playerLoss = _sdEngine != null ? Mathf.Max(0, Mathf.RoundToInt(_sdPlayerHpFrom) - _sdEngine.PlayerHp) : 0;
-            // Keep the loss readable through most of the drain, then settle without drift.
-            bool settled = Mathf.Clamp01(alpha * 3) > .01f;
-            _sdNpcDamageShown = settled ? npcLoss : 0;
-            _sdPlayerDamageShown = settled ? playerLoss : 0;
-            SDApplyHpLines();
-            SDAnimateHpLoss(_sdNpcBar, _sdNpcLossBand,
-                _sdNpcHpFrom, _sdEngine != null ? _sdEngine.NpcHp : 0,
-                _sdEngine != null ? _sdEngine.NpcMaxHp : 1, SDEnemyColor, alpha);
-            SDAnimateHpLoss(_sdPlayerBar, _sdPlayerLossBand,
-                _sdPlayerHpFrom, _sdEngine != null ? _sdEngine.PlayerHp : 0,
-                ScoreDuel.StartingHp, SDPlayerColor, alpha);
+            if (_sdEngine == null || _sdEngine.LastRound == null) return;
+            float age = alpha <= 0
+                ? HealthPresentation.End
+                : Mathf.Lerp(HealthPresentation.DamageStart, HealthPresentation.End, 1f - Mathf.Clamp01(alpha));
+            SDTickHpPresentation(age);
         }
 
         private void SDAnimateHpLoss(Image fill, Image band, float before, int after,

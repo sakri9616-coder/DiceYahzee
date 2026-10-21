@@ -197,7 +197,7 @@ namespace ParvaMirabilia.Quality.Tests
             ExecuteEvents.Execute(battle.gameObject, pointer, ExecuteEvents.endDragHandler);
             Assert.That(Engine.History.Count, Is.EqualTo(1));
             CollectionAssert.AreEqual(new[] { false, false, false, false, false }, Engine.Held);
-            yield return new WaitForSeconds(.95f);
+            yield return new WaitForSeconds(1.3f);
             var own = Read<RectTransform[]>("_sdFxDice");
             var npc = Read<RectTransform[]>("_sdNpcDieTransforms");
             for (int i = 0; i < 5; i++)
@@ -271,7 +271,7 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(Root("_sdBattle").Find("Advance"), Is.Null);
             TableClick();
             Assert.That(Engine.Round, Is.EqualTo(1), "a running flight cannot leak into the next turn");
-            yield return new WaitForSeconds(.95f);
+            yield return new WaitForSeconds(1.3f);
             var own = Read<RectTransform[]>("_sdFxDice");
             var npc = Read<RectTransform[]>("_sdNpcDieTransforms");
             for (int i = 0; i < 5; i++)
@@ -303,7 +303,7 @@ namespace ParvaMirabilia.Quality.Tests
             ExecuteEvents.Execute(battle.gameObject, release, ExecuteEvents.pointerDownHandler);
             ExecuteEvents.Execute(battle.gameObject, release, ExecuteEvents.pointerClickHandler);
             Assert.That(Engine.Round, Is.EqualTo(round), "a click during attack is ignored");
-            yield return new WaitForSeconds(.95f);
+            yield return new WaitForSeconds(1.3f);
             ExecuteEvents.Execute(battle.gameObject, release, ExecuteEvents.pointerClickHandler);
             Assert.That(Engine.Round, Is.EqualTo(round), "a press begun during attack stays ineligible after recovery");
             Call("SDOpenRules");
@@ -319,11 +319,28 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(Engine.History.Count, Is.EqualTo(1));
             yield return new WaitForSeconds(.8f);
             PullToFire();
-            yield return new WaitForSeconds(.95f);
+            yield return new WaitForSeconds(1.3f);
             TableClick("Die0");
             Assert.That(Engine.Round, Is.EqualTo(round + 2), "a recovered turn also accepts a fresh die click");
             Assert.That(Engine.Held[0], Is.False, "advancing with a die does not hold the next hand");
         }
+
+        [UnityTest] public IEnumerator AdvanceWaitsForTheHealthBeatToFinish()
+        {
+            PullToFire();
+            // The strike is over at 0.90, but the damage bar is still moving until 1.24. The
+            // next round must stay closed so its opening HP cannot jump past the visible drop.
+            yield return new WaitForSeconds(1.0f);
+            Assert.That(Read<float>("_sdAttackAge"), Is.LessThan(0f));
+            Assert.That(Read<float>("_sdHpAge"), Is.GreaterThan(0f));
+            int round = Engine.Round;
+            TableClick();
+            Assert.That(Engine.Round, Is.EqualTo(round), "the health beat keeps the next round closed");
+            yield return new WaitForSeconds(.35f);
+            TableClick();
+            Assert.That(Engine.Round, Is.EqualTo(round + 1), "the next round opens after the health settles");
+        }
+
         [UnityTest] public IEnumerator ShortDownwardDragCancels_AndRestoresTheOriginalHoldsAndPositions()
         {
             Press("_sdBattle", "Die0");
@@ -439,7 +456,7 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(Engine.PlayerUsed[(int)category], Is.True);
             Assert.That(Read<bool>("_sdSaveArmed"), Is.False, "the completed release consumes the armed mode");
             Assert.That(Engine.Outcome, Is.Null, "the chosen seeded first turn permits a carry test");
-            yield return new WaitForSeconds(.95f);
+            yield return new WaitForSeconds(1.3f);
             TableClick();
             yield return new WaitForSeconds(.6f);
             CollectionAssert.AreEqual(dice, Engine.PlayerDice);
@@ -484,9 +501,9 @@ namespace ParvaMirabilia.Quality.Tests
             }
             var unformed = ScoreRules.Evaluate(unformedKind, Engine.PlayerDice);
             Assert.That(unformed.IsFormed, Is.False);
-            Assert.That(unformed.BonusScore, Is.Zero);
+            Assert.That(unformed.BonusScore, Is.EqualTo(unformed.Score - unformed.BaseScore));
             Assert.That(unformed.BaseScore, Is.GreaterThanOrEqualTo(5));
-            Assert.That(unformed.Score, Is.EqualTo(unformed.BaseScore));
+            Assert.That(unformed.Score, Is.EqualTo(unformed.BaseScore * ScoreRules.UnformedMultiplier));
             PressLive(unformedKind);
             Assert.That(Read<ScoreHandKind>("_sdSelectedKind"), Is.EqualTo(unformedKind));
             Assert.That(Read<Text>("_sdRoleLabel").text, Is.EqualTo(ScoreRules.Name(unformedKind)));
@@ -542,12 +559,12 @@ namespace ParvaMirabilia.Quality.Tests
         [UnityTest] public IEnumerator RoleRailsPrintTheirMultiplierTag()
         {
             var categories = Read<Button[]>("_sdLiveCategories");
-            Assert.That(categories[(int)ScoreHandKind.Pair].transform.Find("Multiplier").GetComponent<Text>().text, Is.EqualTo("×1.5"));
-            Assert.That(categories[(int)ScoreHandKind.FullHouse].transform.Find("Multiplier").GetComponent<Text>().text, Is.EqualTo("×2.5"));
-            Assert.That(categories[(int)ScoreHandKind.Five].transform.Find("Multiplier").GetComponent<Text>().text, Is.EqualTo("150点"));
+            Assert.That(categories[(int)ScoreHandKind.Pair].transform.Find("Multiplier").GetComponent<Text>().text, Is.EqualTo("×15"));
+            Assert.That(categories[(int)ScoreHandKind.FullHouse].transform.Find("Multiplier").GetComponent<Text>().text, Is.EqualTo("×25"));
+            Assert.That(categories[(int)ScoreHandKind.Five].transform.Find("Multiplier").GetComponent<Text>().text, Is.EqualTo("900点"));
             Assert.That(categories[(int)ScoreHandKind.Chance].transform.Find("Multiplier").GetComponent<Text>().text, Is.EqualTo("逆転"));
             var npcRow = Root("_sdBattle").Find("NpcScorecard/NpcCategory0");
-            Assert.That(npcRow.Find("Multiplier").GetComponent<Text>().text, Is.EqualTo("×1.5"),
+            Assert.That(npcRow.Find("Multiplier").GetComponent<Text>().text, Is.EqualTo("×15"),
                 "the enemy rail prints the same multipliers beside its roles");
             yield return null;
         }
@@ -634,7 +651,7 @@ namespace ParvaMirabilia.Quality.Tests
             ghost.rectTransform.SetParent(Root("_sdBattle"), false);
             var place = typeof(GameFlow).GetMethod("SDPlaceGhost", Private | BindingFlags.Static);
             Assert.That(place, Is.Not.Null);
-            place.Invoke(null, new object[] { ghost, 100, 100, 1, true });
+            place.Invoke(null, new object[] { ghost, 80, 100, 10, 20, true });
             float right = ghost.rectTransform.anchoredPosition.x + ghost.rectTransform.sizeDelta.x;
             Assert.That(right, Is.LessThanOrEqualTo(572f + .1f), "no damage band may pass the pill's rounded end");
             Object.Destroy(ghost.gameObject);
@@ -712,7 +729,7 @@ namespace ParvaMirabilia.Quality.Tests
             Call("SDHandleWheel", -1f);
             Assert.That(Read<ScoreHandKind>("_sdSelectedKind"), Is.EqualTo(ScoreHandKind.Pair));
             Assert.That(Engine.Outcome, Is.Null);
-            yield return new WaitForSeconds(.95f);
+            yield return new WaitForSeconds(1.3f);
             TableClick();
             PressLive(ScoreHandKind.Chance);
             yield return new WaitForSeconds(.8f);
@@ -779,7 +796,7 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(Engine.LastRound.PlayerKind, Is.EqualTo(expected));
             Assert.That(Engine.PlayerUsed[(int)expected], Is.True);
             Assert.That(Engine.Outcome, Is.Null);
-            yield return new WaitForSeconds(.95f);
+            yield return new WaitForSeconds(1.3f);
             TableClick();
             Assert.That(Read<bool>("_sdSelectedManually"), Is.False);
             yield return new WaitForSeconds(.8f);
@@ -908,7 +925,7 @@ namespace ParvaMirabilia.Quality.Tests
             var role = Read<Text>("_sdRoleLabel");
             var toast = Read<Text>("_sdToast");
             Write("_sdToastAge", 0f);
-            toast.text = "スリーカインド ×1.75";
+            toast.text = "スリーカインド ×20";
             Call("SDRefresh");
             Canvas.ForceUpdateCanvases();
             Assert.That(role.enabled, Is.False);
@@ -1128,6 +1145,8 @@ namespace ParvaMirabilia.Quality.Tests
                 "the fixture is genuinely mid-clash");
 
             // The fade runs from each group's own contact alpha down to transparent at Duration and holds that.
+            // The swept side is lower now: its dice are scattered fully transparent by the strike.
+            int winner = PresenterRead<int>(presenter, "Winner");
             var ownContact = new float[own.Length];
             var npcContact = new float[npc.Length];
             for (int i = 0; i < 5; i++)
@@ -1135,20 +1154,38 @@ namespace ParvaMirabilia.Quality.Tests
                 if (ownGroups[i] != null)
                 {
                     ownContact[i] = ownGroups[i].alpha;
-                    Assert.That(ownContact[i], Is.GreaterThan(0f), "own die " + i + " visible at contact");
+                    if (winner == 1)
+                        Assert.That(ownContact[i], Is.EqualTo(0f).Within(0.001f), "own die " + i + " is swept away");
+                    else
+                        Assert.That(ownContact[i], Is.GreaterThan(0f), "own die " + i + " visible at contact");
                 }
                 if (npcGroups[i] != null)
                 {
                     npcContact[i] = npcGroups[i].alpha;
-                    Assert.That(npcContact[i], Is.GreaterThan(0f), "enemy die " + i + " visible at contact");
+                    if (winner == 0)
+                        Assert.That(npcContact[i], Is.EqualTo(0f).Within(0.001f), "enemy die " + i + " is swept away");
+                    else
+                        Assert.That(npcContact[i], Is.GreaterThan(0f), "enemy die " + i + " visible at contact");
                 }
             }
             Write("_sdAttackAge", (PresenterConstant("ContactTime") + PresenterConstant("Duration")) * 0.5f);
             Call("SDAnimateImpactPresentation");
             for (int i = 0; i < 5; i++)
             {
-                if (ownGroups[i] != null) Assert.That(ownGroups[i].alpha, Is.LessThan(ownContact[i] - .01f), "own die " + i + " fades after contact");
-                if (npcGroups[i] != null) Assert.That(npcGroups[i].alpha, Is.LessThan(npcContact[i] - .01f), "enemy die " + i + " fades after contact");
+                if (ownGroups[i] != null)
+                {
+                    if (winner == 1)
+                        Assert.That(ownGroups[i].alpha, Is.EqualTo(0f).Within(0.001f), "own die " + i + " stays swept out after contact");
+                    else
+                        Assert.That(ownGroups[i].alpha, Is.LessThan(ownContact[i] - .01f), "own die " + i + " fades after contact");
+                }
+                if (npcGroups[i] != null)
+                {
+                    if (winner == 0)
+                        Assert.That(npcGroups[i].alpha, Is.EqualTo(0f).Within(0.001f), "enemy die " + i + " stays swept out after contact");
+                    else
+                        Assert.That(npcGroups[i].alpha, Is.LessThan(npcContact[i] - .01f), "enemy die " + i + " fades after contact");
+                }
             }
             Write("_sdAttackAge", PresenterConstant("Duration"));
             Call("SDAnimateImpactPresentation");
@@ -1187,15 +1224,21 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(((Image)PresenterField(presenter, "_impactFlash")).gameObject.activeSelf, Is.False, "Reset hides the impact flash");
 
             // The damage bar waits for the strike at the shared contact time; the receipt is untouched.
-            float barBefore = Read<float>("_sdNpcHpShown");
+            // Zero the receipt's heal for this fixture so the assertion isolates the damage beat.
+            typeof(ScoreRound).GetProperty("PlayerHeal").SetValue(Engine.LastRound, 0);
+            typeof(ScoreRound).GetProperty("NpcHeal").SetValue(Engine.LastRound, 0);
             Write("_sdPlayerHpFrom", Engine.PlayerHp + 12f);
             Write("_sdNpcHpFrom", Engine.NpcHp + 12f);
-            Write("_sdHpAge", 0f);
+            Write("_sdPlayerHpShown", Engine.PlayerHp + 12f);
+            Write("_sdNpcHpShown", Engine.NpcHp + 12f);
+            float barBefore = Read<float>("_sdNpcHpShown");
+            Write("_sdHpAge", PresenterConstant("CollisionTime"));
             Write("_sdSmokeAttackAgeOverride", PresenterConstant("CollisionTime"));
             Call("SDStartAttackMotion");
             yield return null; Canvas.ForceUpdateCanvases();
             Assert.That(Read<float>("_sdNpcHpShown"), Is.EqualTo(barBefore).Within(.001f),
                 "the collision leaves the damage bar untouched");
+            Write("_sdHpAge", PresenterConstant("ContactTime"));
             Write("_sdSmokeAttackAgeOverride", PresenterConstant("ContactTime"));
             yield return null; Canvas.ForceUpdateCanvases();
             Assert.That(Read<float>("_sdNpcHpShown"), Is.Not.EqualTo(barBefore).Within(.001f),
@@ -1208,6 +1251,7 @@ namespace ParvaMirabilia.Quality.Tests
                 "the strike never rewrites the receipt's incoming damage");
 
             Write("_sdSmokeAttackAgeOverride", null);
+            Write("_sdHpAge", -1f);
             Call("SDResetImpactPresentation");
             yield return null;
 
@@ -1245,7 +1289,7 @@ namespace ParvaMirabilia.Quality.Tests
         [UnityTest] public IEnumerator TheCentralNumeralSwellsWithTheScore()
         {
             var map = typeof(GameFlow).GetMethod("SDScoreFontFor", Private | BindingFlags.Static);
-            int[] scores = { 24, 70, 110, 150 }, expected = { 60, 64, 72, 80 };
+            int[] scores = { 140, 240, 500, 900 }, expected = { 60, 64, 72, 80 };
             for (int i = 0; i < scores.Length; i++)
                 Assert.That((int)map.Invoke(null, new object[] { scores[i] }), Is.EqualTo(expected[i]),
                     scores[i] + " points size their figure at " + expected[i]);
@@ -1255,10 +1299,10 @@ namespace ParvaMirabilia.Quality.Tests
             PullToFire();
             var round = Engine.LastRound;
             int original = round.PlayerScore;
-            typeof(ScoreRound).GetProperty("PlayerScore").SetValue(round, 150);
+            typeof(ScoreRound).GetProperty("PlayerScore").SetValue(round, 900);
             Call("SDRefresh");
             Assert.That(Read<Text>("_sdScoreNumber").fontSize, Is.EqualTo(80),
-                "a 150-point hand fronts an 80-unit figure");
+                "a 900-point Yahtzee fronts an 80-unit figure");
             typeof(ScoreRound).GetProperty("PlayerScore").SetValue(round, original);
             yield return null;
         }
@@ -1357,8 +1401,8 @@ namespace ParvaMirabilia.Quality.Tests
             Assert.That(Read<Text>("_sdEffectLabel").text, Is.Empty);
             var kind = Read<ScoreHandKind>("_sdSelectedKind");
             var offer = ScoreRules.Evaluate(kind, Engine.PlayerDice);
-            float factor = offer.IsFormed ? ScoreRules.MultiplierQuarters(kind) / 4f : 1f;
-            Assert.That(Read<Text>("_sdBreakdown").text, Is.EqualTo("(20 + " + (offer.BaseScore - 20) + ") ×" + factor.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)));
+            int factor = offer.IsFormed ? ScoreRules.Multiplier(kind) : ScoreRules.UnformedMultiplier;
+            Assert.That(Read<Text>("_sdBreakdown").text, Is.EqualTo(offer.BaseScore + " × " + factor.ToString(System.Globalization.CultureInfo.InvariantCulture)));
             Assert.That(Read<Text>("_sdNpcScoreNumber").text, Is.EqualTo(Engine.Intent.Score.ToString()));
         }
         private Vector2 ScreenAtDie(int index) => RectTransformUtility.WorldToScreenPoint(null, Die(index).TransformPoint(Vector3.zero));

@@ -79,11 +79,12 @@ namespace ParvaMirabilia.Presentation
                 int swap = ownAttack; ownAttack = enemyAttack; enemyAttack = swap;
             }
             int strength = Mathf.Max(outgoing, incoming);
-            _sdImpactTier = strength < 30 ? 0 : strength < 50 ? 1 : strength < 80 ? 2 : 3;
+            // Damage bins follow the ×10 score economy: 250 / 450 / 700 of real HP loss.
+            _sdImpactTier = strength < 250 ? 0 : strength < 450 ? 1 : strength < 700 ? 2 : 3;
             // Strength tier comes from the same raw own/enemy score bins the online adapter
             // uses, so identical rounds produce identical punch between single and online.
             int score = Mathf.Max(round.PlayerScore, round.NpcScore);
-            _sdImpactPunch = score < 50 ? 0 : score < 100 ? 1 : score < 130 ? 2 : 3;
+            _sdImpactPunch = SDScorePulseTier(score);
             Vector2 ownHp = SDHpTarget(_sdPlayerBar);
             Vector2 enemyHp = SDHpTarget(_sdNpcBar);
             // Reuse the cached die transforms directly, no per-attack RectTransform[5] garbage.

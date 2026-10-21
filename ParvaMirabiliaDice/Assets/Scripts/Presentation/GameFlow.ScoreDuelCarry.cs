@@ -8,7 +8,7 @@ namespace ParvaMirabilia.Presentation
         private RectTransform _sdCarryRack;
         private CanvasGroup _sdCarryRackGroup;
         private readonly DiceView[] _sdCarryDice = new DiceView[5];
-        private ScoreHandEffectGraphic _sdCarryEffect;
+        private IScoreEffectSurface _sdCarryEffect;
         private float _sdCarryReturnAge = -1;
         private float _sdCarryToggleAge = -1;
         private const float SDCarryToggleDuration = .56f;
@@ -43,8 +43,7 @@ namespace ParvaMirabilia.Presentation
                     graphic.raycastTarget = false;
             }
             var effectRoot = UiFactory.CreateStretch("CarryEffect", _sdBattle);
-            _sdCarryEffect = effectRoot.gameObject.AddComponent<ScoreHandEffectGraphic>();
-            _sdCarryEffect.raycastTarget = false;
+            _sdCarryEffect = UiFactory.AddVertexGraphic<ScoreHandEffectGraphic>(effectRoot.gameObject);
             // Everything the HUD builds after this point is a later sibling and draws over the
             // stroke: the dice row and the role panel with its score, the HP bars and the labels
             // that get raised last, the hold locks, the 1100x500 impact geometry and the incoming

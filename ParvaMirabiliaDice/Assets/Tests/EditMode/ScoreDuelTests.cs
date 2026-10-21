@@ -80,9 +80,9 @@ namespace ParvaMirabilia.Tests
             }
         }
 
-        [TestCase(ScoreHandKind.Pair, 6)]
-        [TestCase(ScoreHandKind.Three, 8)]
-        [TestCase(ScoreHandKind.Four, 12)]
+        [TestCase(ScoreHandKind.Pair, 15)]
+        [TestCase(ScoreHandKind.Three, 20)]
+        [TestCase(ScoreHandKind.Four, 30)]
         public void MatchingFacesHaveTheSameMultiplierWhileRawFaceValuesStillMatter(ScoreHandKind kind, int expected)
         {
             int count = kind == ScoreHandKind.Pair ? 2 : kind == ScoreHandKind.Three ? 3 : kind == ScoreHandKind.Four ? 4 : 5;
@@ -91,18 +91,18 @@ namespace ParvaMirabilia.Tests
             for (int i = 0; i < count; i++) { low[i] = 1; high[i] = 6; }
             var lowOffer = ScoreRules.Evaluate(kind, low);
             var highOffer = ScoreRules.Evaluate(kind, high);
-            Assert.That(ScoreRules.MultiplierQuarters(kind), Is.EqualTo(expected));
-            Assert.That(lowOffer.Score, Is.EqualTo(lowOffer.BaseScore * expected / 4));
-            Assert.That(highOffer.Score, Is.EqualTo(highOffer.BaseScore * expected / 4));
+            Assert.That(ScoreRules.Multiplier(kind), Is.EqualTo(expected));
+            Assert.That(lowOffer.Score, Is.EqualTo(lowOffer.BaseScore * expected));
+            Assert.That(highOffer.Score, Is.EqualTo(highOffer.BaseScore * expected));
             Assert.That(highOffer.Score, Is.GreaterThan(lowOffer.Score));
         }
 
         [Test]
         public void DistinctPairsAndExactFullHouseDoNotAcceptOneLargeGroup()
         {
-            Assert.That(ScoreRules.Evaluate(ScoreHandKind.TwoPair, new[] { 1, 1, 2, 2, 3 }).Score, Is.EqualTo(58));
-            Assert.That(ScoreRules.Evaluate(ScoreHandKind.FullHouse, new[] { 1, 1, 1, 2, 2 }).Score, Is.EqualTo(67));
-            Assert.That(ScoreRules.Evaluate(ScoreHandKind.FullHouse, new[] { 6, 6, 6, 5, 5 }).Score, Is.EqualTo(120));
+            Assert.That(ScoreRules.Evaluate(ScoreHandKind.TwoPair, new[] { 1, 1, 2, 2, 3 }).Score, Is.EqualTo(180));
+            Assert.That(ScoreRules.Evaluate(ScoreHandKind.FullHouse, new[] { 1, 1, 1, 2, 2 }).Score, Is.EqualTo(175));
+            Assert.That(ScoreRules.Evaluate(ScoreHandKind.FullHouse, new[] { 6, 6, 6, 5, 5 }).Score, Is.EqualTo(700));
             Assert.That(ScoreRules.Evaluate(ScoreHandKind.TwoPair, new[] { 1, 1, 1, 1, 2 }).IsFormed, Is.False);
             Assert.That(ScoreRules.Evaluate(ScoreHandKind.FullHouse, new[] { 1, 1, 1, 1, 1 }).IsFormed, Is.False);
         }
@@ -111,11 +111,11 @@ namespace ParvaMirabilia.Tests
         public void StraightMasksContainOneOfEachNecessaryFaceAndNeverDuplicates()
         {
             var small = ScoreRules.Evaluate(ScoreHandKind.SmallStraight, new[] { 2, 3, 3, 4, 5 });
-            Assert.That(small.Score, Is.EqualTo(74));
+            Assert.That(small.Score, Is.EqualTo(340));
             Assert.That(SplitDecision.CountBits(small.Mask), Is.EqualTo(4));
             Assert.That((small.Mask & 2) != 0, Is.Not.EqualTo((small.Mask & 4) != 0));
-            Assert.That(ScoreRules.Evaluate(ScoreHandKind.LargeStraight, new[] { 2, 3, 3, 4, 5 }).Score, Is.EqualTo(37));
-            Assert.That(ScoreRules.Evaluate(ScoreHandKind.LargeStraight, new[] { 6, 2, 5, 3, 4 }).Score, Is.EqualTo(100));
+            Assert.That(ScoreRules.Evaluate(ScoreHandKind.LargeStraight, new[] { 2, 3, 3, 4, 5 }).Score, Is.EqualTo(170));
+            Assert.That(ScoreRules.Evaluate(ScoreHandKind.LargeStraight, new[] { 6, 2, 5, 3, 4 }).Score, Is.EqualTo(500));
         }
 
         [Test]
@@ -125,7 +125,7 @@ namespace ParvaMirabilia.Tests
             game.Roll();
             SetDice(game, 3, 3, 3, 3, 3);
             var receipt = game.Commit(ScoreHandKind.Chance);
-            Assert.That(receipt.PlayerScore, Is.EqualTo(35));
+            Assert.That(receipt.PlayerScore, Is.EqualTo(150));
             Assert.That(game.PlayerUsed[(int)ScoreHandKind.Chance], Is.True);
             game.NextRound(); game.Roll();
             int playerHp = game.PlayerHp, npcHp = game.NpcHp;
@@ -137,19 +137,20 @@ namespace ParvaMirabilia.Tests
         }
 
         [Test]
-        public void AnUnformedCategoryKeepsTheBaseAndDiceTotalAndConsumesItsSlot()
+        public void AnUnformedCategoryPaysTheDiceTotalAtTheFlatRateAndConsumesItsSlot()
         {
             var game = new ScoreDuel(75);
             game.Roll(); SetDice(game, 1, 2, 3, 5, 6);
             var offer = game.Offers[(int)ScoreHandKind.Five];
             Assert.That(offer.IsAvailable, Is.True);
             Assert.That(offer.IsFormed, Is.False);
-            Assert.That(offer.Score, Is.EqualTo(37));
-            Assert.That(offer.BonusScore, Is.Zero);
+            Assert.That(offer.BaseScore, Is.EqualTo(17));
+            Assert.That(offer.Score, Is.EqualTo(170));
+            Assert.That(offer.BonusScore, Is.EqualTo(offer.Score - offer.BaseScore));
             var receipt = game.Commit(ScoreHandKind.Five);
-            Assert.That(receipt.PlayerScore, Is.EqualTo(37));
+            Assert.That(receipt.PlayerScore, Is.EqualTo(170));
             Assert.That(game.PlayerUsed[(int)ScoreHandKind.Five], Is.True);
-            Assert.That(receipt.DamageToPlayer, Is.EqualTo(new ScoreForecast(37, game.Intent.Score).DamageToPlayer));
+            Assert.That(receipt.DamageToPlayer, Is.EqualTo(new ScoreForecast(170, game.Intent.Score).DamageToPlayer));
         }
 
         [Test]
@@ -222,7 +223,11 @@ namespace ParvaMirabilia.Tests
             var game = new ScoreDuel(509, npcStartingHp: ScoreDuel.StartingHp);
             while (game.Phase != MatchPhase.Finished)
             {
-                game.Roll(); MirrorNpcHand(game);
+                game.Roll();
+                // Both pools must enter the clash equal: spend the human rerolls and mark the
+                // NPC's allowance spent so neither side heals from keeping a charge.
+                SpendRerolls(game);
+                MirrorNpcHand(game);
                 game.Commit(game.Intent.Kind);
                 if (game.Phase != MatchPhase.Finished) game.NextRound();
             }
@@ -238,7 +243,7 @@ namespace ParvaMirabilia.Tests
         public void ZeroHpEndsImmediatelyAndNormalMatchesFinishByTheSafetyBound()
         {
             var game = new ScoreDuel(991);
-            game.Roll(); MirrorNpcHand(game);
+            game.Roll(); SpendRerolls(game); MirrorNpcHand(game);
             typeof(ScoreDuel).GetProperty("PlayerHp").SetValue(game, 1);
             game.Commit(game.Intent.Kind);
             Assert.That(game.Outcome.Result, Is.EqualTo(MatchResult.NpcWin));
@@ -266,8 +271,8 @@ namespace ParvaMirabilia.Tests
             var many = new ScoreDuel(818);
             foreach (var duel in new[] { early, many })
             {
-                typeof(ScoreDuel).GetProperty("PlayerHp").SetValue(duel, 1000);
-                typeof(ScoreDuel).GetProperty("NpcHp").SetValue(duel, 1000);
+                typeof(ScoreDuel).GetProperty("PlayerHp").SetValue(duel, 3000);
+                typeof(ScoreDuel).GetProperty("NpcHp").SetValue(duel, 3000);
             }
             for (int round = 0; round < 6; round++)
             {
@@ -284,6 +289,8 @@ namespace ParvaMirabilia.Tests
         [Test]
         public void HighDurabilityDifficultyRaisesOnlyTheEnemyHealth()
         {
+            Assert.That(ScoreDuel.DefaultNpcStartingHp, Is.EqualTo(ScoreDuel.NpcHpForDifficulty(0)));
+            Assert.That(ScoreDuel.EnhancedStartingHp, Is.EqualTo(ScoreDuel.NpcHpForDifficulty(4)));
             var standard = new ScoreDuel(104);
             Assert.That(standard.NpcStartingHp, Is.EqualTo(ScoreDuel.DefaultNpcStartingHp));
             Assert.That(standard.NpcHp, Is.EqualTo(ScoreDuel.DefaultNpcStartingHp));
@@ -318,8 +325,8 @@ namespace ParvaMirabilia.Tests
             Assert.That(game.Outcome, Is.Null);
             Assert.That(game.LastRound, Is.Null);
             Assert.That(game.NpcDice, Is.Null);
-            Assert.That(game.PlayerHp, Is.EqualTo(300));
-            Assert.That(game.NpcHp, Is.EqualTo(250));
+            Assert.That(game.PlayerHp, Is.EqualTo(ScoreDuel.StartingHp));
+            Assert.That(game.NpcHp, Is.EqualTo(ScoreDuel.DefaultNpcStartingHp));
             for (int i = 0; i < ScoreRules.HandCount; i++)
             {
                 Assert.That(game.PlayerUsed[i], Is.False);
@@ -347,22 +354,22 @@ namespace ParvaMirabilia.Tests
             var dice = new[] { 6, 6, 6, 4, 4 };
 
             // The decision is pure score expected value. The full house already banked here is
-            // worth 115, but a formed four of a kind (144) and a formed yahtzee (fixed 150) both
+            // worth 650, but a formed four of a kind (840) and a formed yahtzee (fixed 900) both
             // pay more, so rerolling the two fours is only a question of how many shots remain.
             var fullHouse = ScoreRules.Evaluate(ScoreHandKind.FullHouse, dice);
             var four = ScoreRules.Evaluate(ScoreHandKind.Four, new[] { 6, 6, 6, 6, 4 });
             var yahtzee = ScoreRules.Evaluate(ScoreHandKind.Five, new[] { 6, 6, 6, 6, 6 });
-            Assert.That(fullHouse.Score, Is.EqualTo(115));
-            Assert.That(four.Score, Is.EqualTo(144));
-            Assert.That(yahtzee.Score, Is.EqualTo(150));
+            Assert.That(fullHouse.Score, Is.EqualTo(650));
+            Assert.That(four.Score, Is.EqualTo(840));
+            Assert.That(yahtzee.Score, Is.EqualTo(900));
 
-            // One reroll left: a single shot at a fourth six averages below the banked 115
-            // (exact expected value 107.5), so every die stays.
+            // One reroll left: a single shot at a fourth six averages below the banked 650,
+            // so every die stays.
             Assert.That(ScoreRules.SuggestHeld(dice, available, 1),
                 Is.EqualTo(new[] { true, true, true, true, true }));
 
-            // Two rerolls left: the extra attempt lifts the expected score above the banked 115
-            // (exact expected value 119.4), so only the three sixes stay and both fours are rerolled.
+            // Two rerolls left: the extra attempt lifts the expected score above the banked 650,
+            // so only the three sixes stay and both fours are rerolled.
             Assert.That(ScoreRules.SuggestHeld(dice, available, 2),
                 Is.EqualTo(new[] { true, true, true, false, false }));
 
@@ -375,6 +382,11 @@ namespace ParvaMirabilia.Tests
                 Is.EqualTo(ScoreRules.SuggestHeld(dice, available, 2, -99)));
             Assert.That(ScoreRules.SuggestHeld(dice, available, 2, 655),
                 Is.EqualTo(ScoreRules.SuggestHeld(dice, available, 2)));
+
+            // When the rerolls are also health, stopping with the full house banks 80 more. The
+            // added value lifts the stop above the two-shot chase, so the damaged NPC keeps it.
+            Assert.That(ScoreRules.SuggestHeld(dice, available, 2, valueRerollHeal: true),
+                Is.EqualTo(new[] { true, true, true, true, true }));
         }
 
         [Test]
@@ -399,8 +411,8 @@ namespace ParvaMirabilia.Tests
         {
             var game = new ScoreDuel(509);
             // Isolate category lifecycle from the guaranteed knockout bound.
-            typeof(ScoreDuel).GetProperty("PlayerHp").SetValue(game, 1000);
-            typeof(ScoreDuel).GetProperty("NpcHp").SetValue(game, 1000);
+            typeof(ScoreDuel).GetProperty("PlayerHp").SetValue(game, 3000);
+            typeof(ScoreDuel).GetProperty("NpcHp").SetValue(game, 3000);
             for (int round = 1; round <= 9; round++)
             {
                 game.Roll(); MirrorNpcHand(game); game.Commit(game.Intent.Kind); game.NextRound();
@@ -425,9 +437,9 @@ namespace ParvaMirabilia.Tests
             var forecast = game.Forecast(ScoreHandKind.Three, true);
             var receipt = game.SaveHand(ScoreHandKind.Three);
             Assert.That(receipt.IsSaved, Is.True);
-            Assert.That(receipt.PlayerScore, Is.EqualTo(100));
-            Assert.That(receipt.DamageToNpc, Is.EqualTo(100 - Math.Min(100, enemyScore) / 2));
-            Assert.That(receipt.DamageToPlayer, Is.EqualTo(enemyScore - Math.Min(100, enemyScore) / 2));
+            Assert.That(receipt.PlayerScore, Is.EqualTo(600));
+            Assert.That(receipt.DamageToNpc, Is.EqualTo(600 - Math.Min(600, enemyScore) / 2));
+            Assert.That(receipt.DamageToPlayer, Is.EqualTo(enemyScore - Math.Min(600, enemyScore) / 2));
             Assert.That(receipt.DamageToPlayer, Is.EqualTo(forecast.DamageToPlayer));
             Assert.That(game.PlayerUsed[(int)ScoreHandKind.Three], Is.True);
             Assert.That(game.NpcUsed[(int)receipt.NpcKind], Is.True);
@@ -442,7 +454,7 @@ namespace ParvaMirabilia.Tests
             Assert.That(game.Held, Is.EqualTo(held));
             Assert.Throws<InvalidOperationException>(() => game.Roll());
             Assert.Throws<InvalidOperationException>(() => game.SaveHand(ScoreHandKind.Five));
-            Assert.That(game.Forecast(ScoreHandKind.Five).Score, Is.EqualTo(150));
+            Assert.That(game.Forecast(ScoreHandKind.Five).Score, Is.EqualTo(900));
             Assert.That(game.Reroll(), Is.EqualTo(2));
             Assert.That(game.PlayerDice[0], Is.EqualTo(6));
         }
@@ -452,6 +464,7 @@ namespace ParvaMirabilia.Tests
         {
             var game = new ScoreDuel(104);
             game.Roll();
+            SpendRerolls(game);
             typeof(ScoreDuel).GetProperty("PlayerHp").SetValue(game, 1);
             typeof(ScoreDuel).GetProperty("NpcHp").SetValue(game, 1);
             MirrorNpcHand(game);
@@ -469,7 +482,7 @@ namespace ParvaMirabilia.Tests
         [Test]
         public void EveryOrderedHandUsesTheDocumentedMultiplierAndDamagePreservesTheScoreDifference()
         {
-            var quarters = new[] { 6, 8, 8, 10, 8, 12, 10, 12, 4 };
+            var multipliers = new[] { 15, 20, 20, 25, 20, 30, 25, 30, 10 };
             var dice = new int[5];
             for (int code = 0; code < 7776; code++)
             {
@@ -489,53 +502,59 @@ namespace ParvaMirabilia.Tests
                 for (int kind = 0; kind < 9; kind++)
                 {
                     var offer = ScoreRules.Evaluate((ScoreHandKind)kind, dice);
-                    Assert.That(offer.BaseScore, Is.EqualTo(20 + sum));
+                    int expected = kind == (int)ScoreHandKind.Five && formed[kind] ? ScoreRules.YahtzeeScore
+                        : sum * (formed[kind] ? multipliers[kind] : ScoreRules.UnformedMultiplier);
+                    Assert.That(offer.BaseScore, Is.EqualTo(sum));
                     Assert.That(offer.IsFormed, Is.EqualTo(formed[kind]));
-                    Assert.That(offer.Score, Is.EqualTo(kind == 7 && formed[kind] ? 150 : (20 + sum) * (formed[kind] ? quarters[kind] : 4) / 4));
+                    Assert.That(offer.Score, Is.EqualTo(expected));
                     Assert.That(offer.Score, Is.EqualTo(offer.BaseScore + offer.BonusScore));
                 }
             }
-            for (int player = 25; player <= 162; player++)
-                for (int npc = 25; npc <= 162; npc++)
+            for (int player = 50; player <= 900; player += 5)
+                for (int npc = 50; npc <= 900; npc += 5)
                 {
                     var forecast = new ScoreForecast(player, npc);
                     Assert.That(forecast.DamageToNpc - forecast.DamageToPlayer, Is.EqualTo(player - npc));
-                    Assert.That(forecast.DamageToNpc, Is.GreaterThanOrEqualTo(13));
-                    Assert.That(forecast.DamageToPlayer, Is.GreaterThanOrEqualTo(13));
+                    Assert.That(forecast.DamageToNpc, Is.GreaterThanOrEqualTo(25));
+                    Assert.That(forecast.DamageToPlayer, Is.GreaterThanOrEqualTo(25));
                     Assert.That(player - forecast.DamageToNpc, Is.EqualTo(npc - forecast.DamageToPlayer));
                 }
-            Assert.That(ScoreDuel.SafetyRoundBound, Is.EqualTo(24));
+            Assert.That(ScoreDuel.SafetyRoundBound, Is.EqualTo(110),
+                "the guard uses the largest enemy pool and the slowest decided exchange");
         }
 
-        [TestCase(30, 10, MatchResult.PlayerWin, -8, -22)]
-        [TestCase(20, 20, MatchResult.NpcWin, -18, -12)]
-        [TestCase(16, 10, MatchResult.Draw, -22, -22)]
+        [TestCase(30, 190, MatchResult.PlayerWin, -5, -15)]
+        [TestCase(10, 200, MatchResult.NpcWin, -25, -5)]
+        [TestCase(20, 190, MatchResult.Draw, -15, -15)]
         public void SimultaneousKnockoutUsesRawHpIncludingThePriorAdvantage(int playerHp, int npcHp,
             MatchResult result, int rawPlayer, int rawNpc)
         {
             var game = new ScoreDuel(104);
             game.Roll();
+            // Spend every reroll so this test isolates the raw-HP tiebreak from the new
+            // unspent-reroll healing; a kept reroll would raise both pools before the clash.
+            SpendRerolls(game);
             typeof(ScoreDuel).GetProperty("PlayerHp").SetValue(game, playerHp);
             typeof(ScoreDuel).GetProperty("NpcHp").SetValue(game, npcHp);
-            SetDice(game, 2, 2, 2, 3, 3); // base32, three =>56
+            SetDice(game, 2, 2, 2, 3, 3); // total 12, three of a kind => 240 against 70
             typeof(ScoreIntent).GetProperty("Score").SetValue(game.Intent, 70);
             var receipt = game.Commit(ScoreHandKind.Three);
             Assert.That(receipt.PlayerRawHpAfter, Is.EqualTo(rawPlayer));
             Assert.That(receipt.NpcRawHpAfter, Is.EqualTo(rawNpc));
             Assert.That(game.PlayerHp, Is.Zero); Assert.That(game.NpcHp, Is.Zero);
             Assert.That(game.Outcome.Result, Is.EqualTo(result));
-            Assert.That(game.Outcome.Reason, Is.EqualTo("同時KO"));
+            Assert.That(game.Outcome.Reason, Is.EqualTo("同時KO（残HP判定）"));
         }
 
-        [TestCase(0, 250)]
-        [TestCase(1, 350)]
-        [TestCase(2, 400)]
-        [TestCase(3, 450)]
-        [TestCase(4, 550)]
+        [TestCase(0, 1250)]
+        [TestCase(1, 1750)]
+        [TestCase(2, 2000)]
+        [TestCase(3, 2250)]
+        [TestCase(4, 2750)]
         public void DifficultyChangesOnlyEnemyHp(int tier, int hp)
         {
             var game = new ScoreDuel(104, NpcPersonality.Expert, ScoreDuel.NpcHpForDifficulty(tier));
-            Assert.That(game.PlayerHp, Is.EqualTo(300));
+            Assert.That(game.PlayerHp, Is.EqualTo(1500));
             Assert.That(game.NpcHp, Is.EqualTo(hp));
             Assert.That(game.Personality, Is.EqualTo(NpcPersonality.Expert));
         }
@@ -552,8 +571,8 @@ namespace ParvaMirabilia.Tests
             Assert.That(preview.IsReversed, Is.True);
             Assert.That(receipt.IsReversed, Is.True);
             Assert.That(receipt.IsSaved, Is.True);
-            Assert.That(receipt.DamageToPlayer, Is.EqualTo(13));
-            Assert.That(receipt.DamageToNpc, Is.EqualTo(89));
+            Assert.That(receipt.DamageToPlayer, Is.EqualTo(25));
+            Assert.That(receipt.DamageToNpc, Is.EqualTo(76));
             Assert.That(game.PlayerUsed[(int)ScoreHandKind.Chance], Is.True);
             game.NextRound();
             Assert.That(game.PlayerDice, Is.EqualTo(new[] { 1, 1, 1, 1, 1 }));
@@ -562,8 +581,8 @@ namespace ParvaMirabilia.Tests
         [Test]
         public void FormedYahtzeeIsFixedAndItsExtraRerollExpiresAfterNextRound()
         {
-            Assert.That(ScoreRules.Evaluate(ScoreHandKind.Five, new[] { 1, 1, 1, 1, 1 }).Score, Is.EqualTo(150));
-            Assert.That(ScoreRules.Evaluate(ScoreHandKind.Five, new[] { 6, 6, 6, 6, 6 }).Score, Is.EqualTo(150));
+            Assert.That(ScoreRules.Evaluate(ScoreHandKind.Five, new[] { 1, 1, 1, 1, 1 }).Score, Is.EqualTo(900));
+            Assert.That(ScoreRules.Evaluate(ScoreHandKind.Five, new[] { 6, 6, 6, 6, 6 }).Score, Is.EqualTo(900));
             var game = new ScoreDuel(104, npcStartingHp: 10000);
             typeof(ScoreDuel).GetProperty("PlayerHp").SetValue(game, 10000);
             game.Roll(); SetDice(game, 6, 6, 6, 6, 6); game.Commit(ScoreHandKind.Five);
@@ -608,7 +627,7 @@ namespace ParvaMirabilia.Tests
             typeof(ScoreIntent).GetProperty("Score").SetValue(game.Intent, 51);
             var receipt = game.Commit(ScoreHandKind.Five);
             Assert.That(receipt.IsReversed, Is.True);
-            Assert.That(receipt.DamageToPlayer, Is.EqualTo(125));
+            Assert.That(receipt.DamageToPlayer, Is.EqualTo(875));
             Assert.That(receipt.DamageToNpc, Is.EqualTo(26));
 
             // Two Chances cancel out (XOR), matching the online resolution.
@@ -618,8 +637,90 @@ namespace ParvaMirabilia.Tests
             typeof(ScoreIntent).GetProperty("Score").SetValue(both.Intent, 51);
             var twoChances = both.Commit(ScoreHandKind.Chance);
             Assert.That(twoChances.IsReversed, Is.False);
-            Assert.That(twoChances.DamageToPlayer, Is.EqualTo(39));
-            Assert.That(twoChances.DamageToNpc, Is.EqualTo(13));
+            Assert.That(twoChances.DamageToPlayer, Is.EqualTo(26));
+            Assert.That(twoChances.DamageToNpc, Is.EqualTo(25));
+        }
+
+        [Test]
+        public void UnspentRerollsHealBeforeDamageAndCapAtTheMaximum()
+        {
+            var game = new ScoreDuel(321, npcStartingHp: 10000);
+            game.Roll();
+            typeof(ScoreDuel).GetProperty("PlayerHp").SetValue(game, 1400);
+            SpendNpcRerolls(game);
+            SetDice(game, 1, 2, 3, 5, 6);
+            var receipt = game.Commit(ScoreHandKind.Chance);
+            Assert.That(receipt.PlayerHpBefore, Is.EqualTo(1400));
+            Assert.That(receipt.PlayerHeal, Is.EqualTo(80), "two kept rerolls restore 40 each");
+            Assert.That(receipt.PlayerRawHpAfter, Is.EqualTo(1480 - receipt.DamageToPlayer));
+            Assert.That(game.PlayerHp, Is.EqualTo(receipt.PlayerRawHpAfter));
+
+            var capped = new ScoreDuel(322);
+            capped.Roll();
+            typeof(ScoreDuel).GetProperty("PlayerHp").SetValue(capped, 1490);
+            SpendNpcRerolls(capped);
+            SetDice(capped, 1, 2, 3, 5, 6);
+            Assert.That(capped.Commit(ScoreHandKind.Chance).PlayerHeal, Is.EqualTo(10),
+                "the heal stops at the maximum instead of banking the excess");
+        }
+
+        [Test]
+        public void NpcHealUsesItsOwnUnspentRerollsBeforeDamage()
+        {
+            var game = new ScoreDuel(325, NpcPersonality.Expert, 10000);
+            game.Roll();
+            typeof(ScoreDuel).GetProperty("NpcHp").SetValue(game, 1000);
+            // Keep the NPC's two-reroll allowance in hand so its side of the receipt exercises
+            // the same heal path the player has, rather than only the human side.
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            typeof(ScoreDuel).GetField("_npcRoundRerolls", flags).SetValue(game, 2);
+            typeof(ScoreDuel).GetField("_npcRerollsUsed", flags).SetValue(game, 0);
+            MirrorNpcHand(game);
+            var receipt = game.Commit(game.Intent.Kind);
+            Assert.That(receipt.NpcRerollsUsed, Is.Zero);
+            Assert.That(receipt.NpcHeal, Is.EqualTo(80), "the NPC keeps two rerolls and restores 40 each");
+            Assert.That(receipt.NpcHpBefore, Is.EqualTo(1000));
+            Assert.That(receipt.NpcRawHpAfter, Is.EqualTo(1080 - receipt.DamageToNpc));
+            Assert.That(receipt.NpcHpAfter, Is.EqualTo(receipt.NpcRawHpAfter));
+            Assert.That(game.NpcHp, Is.EqualTo(receipt.NpcHpAfter));
+        }
+
+        [Test]
+        public void SpendingEveryRerollForgoesTheHeal()
+        {
+            var game = new ScoreDuel(323);
+            game.Roll();
+            typeof(ScoreDuel).GetProperty("PlayerHp").SetValue(game, 1400);
+            while (game.RerollsLeft > 0) game.Reroll();
+            var receipt = game.Commit(ScoreHandKind.Chance);
+            Assert.That(receipt.PlayerHeal, Is.Zero);
+            Assert.That(game.PlayerHp, Is.EqualTo(Math.Max(0, 1400 - receipt.DamageToPlayer)));
+        }
+
+        [Test]
+        public void YahtzeeBonusAddsAThirdHealTheNextRound()
+        {
+            var game = new ScoreDuel(324, npcStartingHp: 10000);
+            game.Roll(); SetDice(game, 6, 6, 6, 6, 6); game.Commit(ScoreHandKind.Five);
+            game.NextRound();
+            Assert.That(game.RerollsLeft, Is.EqualTo(3));
+            typeof(ScoreDuel).GetProperty("PlayerHp").SetValue(game, 1000);
+            game.Roll(); SpendNpcRerolls(game);
+            var receipt = game.Commit(ScoreHandKind.Chance);
+            Assert.That(receipt.PlayerHeal, Is.EqualTo(120), "three kept rerolls restore 120");
+        }
+
+        private static void SpendNpcRerolls(ScoreDuel game)
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            object allowance = typeof(ScoreDuel).GetField("_npcRoundRerolls", flags).GetValue(game);
+            typeof(ScoreDuel).GetField("_npcRerollsUsed", flags).SetValue(game, allowance);
+        }
+
+        private static void SpendRerolls(ScoreDuel game)
+        {
+            while (game.RerollsLeft > 0) game.Reroll();
+            SpendNpcRerolls(game);
         }
 
         private static bool[] Available(ScoreDuel game)

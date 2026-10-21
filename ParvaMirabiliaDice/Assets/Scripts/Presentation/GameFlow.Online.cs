@@ -22,6 +22,7 @@ namespace ParvaMirabilia.Presentation
             public long revision;
             public OnlinePlayer[] players;
             public int[] damage;
+            public int[] heal;
             public bool[] ready;
             public bool[] rematchReady;
             // Which match this snapshot describes. Incremented by the host on rematch, so the
@@ -38,6 +39,7 @@ namespace ParvaMirabilia.Presentation
         private Text _onlineOwnHpText, _onlineEnemyHpText, _onlineHit;
         // The drop each online bar is printing, so both readings can be reprinted together.
         private int _onlineOwnDamageShown, _onlineEnemyDamageShown;
+        private int _onlineOwnHealShown, _onlineEnemyHealShown;
         private Text _onlineDrawMiracle, _onlineFormula, _onlineEnemyFormula, _onlineEnemyScore;
         private readonly Image[] _onlineRoleMarkers = new Image[9];
         private readonly Text[] _onlineEnemyValues = new Text[9];
@@ -46,12 +48,12 @@ namespace ParvaMirabilia.Presentation
         private readonly Image[] _onlineEnemyMarkers = new Image[9];
         private float _onlineChargeAge;
         private bool _onlineContactPlayed, _onlineOutcomePlayed;
-        private ScoreHandEffectGraphic _onlineCarryEffect;
-        private ScoreHandEffectGraphic _onlineImpactGraphic;
+        private IScoreEffectSurface _onlineCarryEffect;
+        private IScoreEffectSurface _onlineImpactGraphic;
         private SharedAttackPresenter _onlineAttackPresenter;
         private int _onlineImpactWinner = -1;
         private float _onlineCarryEffectAge = -1;
-        private ScoreHandEffectGraphic _onlineGuideGraphic;
+        private IScoreEffectSurface _onlineGuideGraphic;
         private Image _onlineGuideMouse, _onlineWheelMouse, _onlineContinueMouse;
         private RectTransform _onlineHelp;
         private readonly Button[] _onlineRoles = new Button[9];
@@ -275,11 +277,11 @@ namespace ParvaMirabilia.Presentation
             _onlineCarry.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, -232);
             _onlineCarry.GetComponent<RectTransform>().sizeDelta = new Vector2(204, 48);
             var carryEffects = UiFactory.CreateStretch("OnlineCarryEffect", _onlineRoot);
-            _onlineCarryEffect = carryEffects.gameObject.AddComponent<ScoreHandEffectGraphic>();
-            _onlineCarryEffect.raycastTarget = false;
+            _onlineCarryEffect = UiFactory.AddVertexGraphic<ScoreHandEffectGraphic>(
+                carryEffects.gameObject);
             var impactEffects = UiFactory.CreateStretch("OnlineImpactEffect", _onlineRoot);
-            _onlineImpactGraphic = impactEffects.gameObject.AddComponent<ScoreHandEffectGraphic>();
-            _onlineImpactGraphic.raycastTarget = false;
+            _onlineImpactGraphic = UiFactory.AddVertexGraphic<ScoreHandEffectGraphic>(
+                impactEffects.gameObject);
             SDBuildOnlineChanceGlow();
             var mouse = UiFactory.CreateRect("FlickGuideMouse", _onlineRoot, new Vector2(36, 36), new Vector2(SDGuideX, -30));
             _onlineGuideMouse = mouse.gameObject.AddComponent<Image>();
@@ -296,8 +298,8 @@ namespace ParvaMirabilia.Presentation
             _onlineWheelMouse.color = DiceYahzeeVisuals.Brass;
             _onlineWheelMouse.raycastTarget = false;
             var guideEffects = UiFactory.CreateStretch("OnlineGestureGuide", _onlineRoot);
-            _onlineGuideGraphic = guideEffects.gameObject.AddComponent<ScoreHandEffectGraphic>();
-            _onlineGuideGraphic.raycastTarget = false;
+            _onlineGuideGraphic = UiFactory.AddVertexGraphic<ScoreHandEffectGraphic>(
+                guideEffects.gameObject);
             _onlineHit = OnlineText("Impact", "", 34, -204, DiceYahzeeVisuals.Brass);
             // An exact simultaneous raw-HP draw (winner 2) is the rare, memorable ending, so it gets
             // its own name on the table instead of being whispered in the status line. It is a plain
@@ -346,8 +348,8 @@ namespace ParvaMirabilia.Presentation
         private void SDSetOnlineHpLines(int ownHp, int enemyHp)
         {
             if (_onlineOwnHpText == null) return;
-            _onlineOwnHpText.text = SDHealthLine("あなた", Mathf.Max(0, ownHp), ScoreDuel.StartingHp, _onlineOwnDamageShown);
-            _onlineEnemyHpText.text = SDHealthLine("相手", Mathf.Max(0, enemyHp), ScoreDuel.StartingHp, _onlineEnemyDamageShown);
+            _onlineOwnHpText.text = SDHealthLine("あなた", Mathf.Max(0, ownHp), ScoreDuel.StartingHp, _onlineOwnDamageShown, _onlineOwnHealShown);
+            _onlineEnemyHpText.text = SDHealthLine("相手", Mathf.Max(0, enemyHp), ScoreDuel.StartingHp, _onlineEnemyDamageShown, _onlineEnemyHealShown);
         }
         /// <summary>
         /// A dark edge behind an in-bar label so it survives the bright fill, the gold loss band and
@@ -383,10 +385,10 @@ namespace ParvaMirabilia.Presentation
             palette.Face = face; palette.Label = label;
         }
         private Text OnlineText(string name, string text, int size, float y, Color color) => SDText(name, _onlineRoot, text, size, new Vector2(0, y), new Vector2(1050, 48), color);
-        /// <summary>The damage a viewer's bar names for the settled round, or 0 anywhere the round has not landed.</summary>
-        private int OnlineReceivedDamage(bool resolved, int side)
+        /// <summary>One seat's figure from a settled round, or 0 when the snapshot predates the field.</summary>
+        private static int OnlineRoundValue(int[] values, int side)
         {
-            return resolved && _onlineState.damage != null ? Mathf.Max(0, _onlineState.damage[side]) : 0;
+            return values != null && side >= 0 && side < values.Length ? Mathf.Max(0, values[side]) : 0;
         }
         /// <summary>One hand's home pose: the build, the tremble while waiting and the launch all read their start from here, so the three can never drift apart.</summary>
         private static Vector2 OnlineDieHome(int index, bool mine)
@@ -565,7 +567,7 @@ namespace ParvaMirabilia.Presentation
         private string OnlineJson(int viewer)
         {
             var players = _onlineDuel.Snapshot(viewer);
-            var state = new OnlineState { round = _onlineDuel.Round, phase = (int)_onlineDuel.Phase, winner = _onlineDuel.Winner, revision = _onlineRevision, players = new OnlinePlayer[2], damage = _onlineDuel.LastRound?.Damage, ready = (bool[])_onlineReady.Clone(), match = _onlineMatch, rematchReady = (bool[])_onlineRematchReady.Clone() };
+            var state = new OnlineState { round = _onlineDuel.Round, phase = (int)_onlineDuel.Phase, winner = _onlineDuel.Winner, revision = _onlineRevision, players = new OnlinePlayer[2], damage = _onlineDuel.LastRound?.Damage, heal = _onlineDuel.LastRound?.Heal, ready = (bool[])_onlineReady.Clone(), match = _onlineMatch, rematchReady = (bool[])_onlineRematchReady.Clone() };
             for (int i = 0; i < 2; i++) { var p = players[i]; state.players[i] = new OnlinePlayer { hp = p.Hp, held = p.HeldMask, dice = p.Dice, scores = p.CategoryScores, used = p.Used, rerolls = p.RerollsLeft, submitted = p.Submitted, rerollsFinished = p.RerollsFinished, nextBonus = p.NextRerollBonus, kind = (int)p.Kind, score = p.Score, carry = p.Carry, carryUsed = p.CarryUsed, carried = _onlineDuel.LastRound != null && _onlineDuel.LastRound.Round < _onlineDuel.Round && _onlineDuel.LastRound.Carry[i] }; }
             return JsonUtility.ToJson(state);
         }
@@ -700,14 +702,20 @@ namespace ParvaMirabilia.Presentation
                 _onlineEnemyMarkers[k].gameObject.SetActive(false);
             }
             bool resolved = _onlineState.phase == (int)VersusPhase.Resolved || _onlineState.phase == (int)VersusPhase.Finished;
-            int ownReceived = OnlineReceivedDamage(resolved, OnlineMe);
-            int enemyReceived = OnlineReceivedDamage(resolved, 1 - OnlineMe);
             if (_onlineImpactAge < 0)
             {
-                // No drain is running, so the round's damage is the figure each bar names until the
-                // next round replaces it.
-                _onlineOwnDamageShown = ownReceived;
-                _onlineEnemyDamageShown = enemyReceived;
+                // Before the round lands, the owner's line previews the health their kept rerolls
+                // would restore; the opponent's rerolls stay private. The resolved heal and damage
+                // belong to the two beats above, so once those end the figures leave the line
+                // instead of sitting there as a second, static result.
+                bool deciding = !resolved && _onlineState.phase != (int)VersusPhase.Finished &&
+                    _onlineState.phase != (int)VersusPhase.Interrupted;
+                int ownHealPreview = deciding
+                    ? ScoreRules.HealFor(mine.hp, ScoreDuel.StartingHp, mine.rerolls) : 0;
+                _onlineOwnDamageShown = 0;
+                _onlineEnemyDamageShown = 0;
+                _onlineOwnHealShown = ownHealPreview;
+                _onlineEnemyHealShown = 0;
                 SDSetOnlineHpLines(mine.hp, enemy.hp);
             }
             if (_onlineImpactAge < 0) { _onlineOwnLoss.gameObject.SetActive(false); _onlineEnemyLoss.gameObject.SetActive(false); }
@@ -874,9 +882,11 @@ namespace ParvaMirabilia.Presentation
                 if (rematchSmoke && _onlineState.match != smokeMatch)
                 {
                     smokeMatch = _onlineState.match;
-                    if (_onlineState.phase != (int)VersusPhase.Playing || _onlineState.round != 1 || _onlineState.players[0].hp != 300 || _onlineState.players[1].hp != 300)
+                    if (_onlineState.phase != (int)VersusPhase.Playing || _onlineState.round != 1 ||
+                        _onlineState.players[0].hp != ScoreDuel.StartingHp || _onlineState.players[1].hp != ScoreDuel.StartingHp)
                     { TraceOnlineSmoke("DICE_NET_SMOKE rematch did not reset match state", true); Application.Quit(2); yield break; }
-                    TraceOnlineSmoke("DICE_NET_SMOKE REMATCH_STARTED generation=" + smokeMatch + " hp=300,300");
+                    TraceOnlineSmoke("DICE_NET_SMOKE REMATCH_STARTED generation=" + smokeMatch + " hp=" +
+                        ScoreDuel.StartingHp + "," + ScoreDuel.StartingHp);
                 }
                 if (loggedRound != _onlineState.round || loggedPhase != _onlineState.phase)
                 {
@@ -978,7 +988,7 @@ namespace ParvaMirabilia.Presentation
         {
             if (_onlineImpactAge < 0) return;
             _onlineImpactAge += Time.unscaledDeltaTime;
-            if (_onlineImpactAge < SharedAttackPresenter.Duration) return;
+            if (_onlineImpactAge < HealthPresentation.End) return;
             _onlineImpactAge = -1;
             _onlineImpactWinner = -1;
             _onlineContactPlayed = false;
@@ -1059,10 +1069,10 @@ namespace ParvaMirabilia.Presentation
             bool ownChance = mine.kind == (int)ScoreHandKind.Chance;
             bool enemyChance = enemy.kind == (int)ScoreHandKind.Chance;
             if (ownChance != enemyChance) { int swap = ownAttack; ownAttack = enemyAttack; enemyAttack = swap; }
-            // Strength comes from the same raw own/enemy score 50/100/130 bins the single-score
-            // adapter uses, NOT cumulative HP loss, so identical rounds punch identically.
+            // Strength comes from the same raw own/enemy score bins the single-score adapter
+            // uses, NOT cumulative HP loss, so identical rounds punch identically.
             int score = Mathf.Max(ownRaw, enemyRaw);
-            int tier = score < 50 ? 0 : score < 100 ? 1 : score < 130 ? 2 : 3;
+            int tier = SDScorePulseTier(score);
             Vector2 ownTarget = OnlineHpTarget(_onlineOwnHpFill);
             Vector2 enemyTarget = OnlineHpTarget(_onlineEnemyHpFill);
             _onlineAttackPresenter.Begin(_onlineOwnDice, _onlineEnemyDice, ownAttack, enemyAttack, ownTarget, enemyTarget, _sdReducedMotion, tier);
@@ -1085,30 +1095,29 @@ namespace ParvaMirabilia.Presentation
             _onlineImpactAge += Time.unscaledDeltaTime;
             if (_onlineAttackPresenter == null) _onlineAttackPresenter = new SharedAttackPresenter(_onlineRoot);
             _onlineAttackPresenter.Sample(_onlineImpactAge);
-            int ownDamage = _onlineState.damage != null ? _onlineState.damage[OnlineMe] : 0;
-            int enemyDamage = _onlineState.damage != null ? _onlineState.damage[1 - OnlineMe] : 0;
-            // Audio fires once at the exact .64s contact of the shared timeline. HP drain also
-            // begins there so nothing changes before the strike visibly lands.
-            float drainT = Mathf.Clamp01((_onlineImpactAge - SharedAttackPresenter.ContactTime) /
-                Mathf.Max(0.01f, SharedAttackPresenter.Duration - SharedAttackPresenter.ContactTime));
+            int ownDamage = OnlineRoundValue(_onlineState.damage, OnlineMe);
+            int enemyDamage = OnlineRoundValue(_onlineState.damage, 1 - OnlineMe);
+            int ownHeal = OnlineRoundValue(_onlineState.heal, OnlineMe);
+            int enemyHeal = OnlineRoundValue(_onlineState.heal, 1 - OnlineMe);
+            // Audio fires once at the exact .64s contact of the shared timeline. The health bars
+            // use the same two-beat timeline as the solo duel: the kept-reroll heal rises during
+            // the wind-up, then the strike's damage lands at contact.
             if (!_onlineContactPlayed && _onlineImpactAge >= SharedAttackPresenter.ContactTime)
             {
                 _onlineContactPlayed = true;
                 GameAudio.Play(SDImpactSound(enemyDamage, ownDamage));
             }
-            if (_onlineImpactAge >= SharedAttackPresenter.ContactTime)
-            {
-                float eased = 1f - (1f - drainT) * (1f - drainT);
-                float ownHp = Mathf.Lerp(_onlineBeforeOwn, _onlineState.players[OnlineMe].hp, eased);
-                float enemyHp = Mathf.Lerp(_onlineBeforeEnemy, _onlineState.players[1 - OnlineMe].hp, eased);
-                SDSetTableHp(_onlineOwnHpFill, ownHp, ScoreDuel.StartingHp);
-                SDSetTableHp(_onlineEnemyHpFill, enemyHp, ScoreDuel.StartingHp);
-                SDAnimateHpLoss(_onlineOwnHpFill, _onlineOwnLoss, _onlineBeforeOwn, _onlineState.players[OnlineMe].hp, ScoreDuel.StartingHp, SDPlayerColor, 1f - drainT);
-                SDAnimateHpLoss(_onlineEnemyHpFill, _onlineEnemyLoss, _onlineBeforeEnemy, _onlineState.players[1 - OnlineMe].hp, ScoreDuel.StartingHp, SDEnemyColor, 1f - drainT);
-                _onlineOwnDamageShown = Mathf.Max(0, ownDamage);
-                _onlineEnemyDamageShown = Mathf.Max(0, enemyDamage);
-                SDSetOnlineHpLines(Mathf.RoundToInt(ownHp), Mathf.RoundToInt(enemyHp));
-            }
+            HealthPresentation.Frame own = HealthPresentation.At(_onlineImpactAge,
+                _onlineBeforeOwn, ownHeal, ownDamage, ScoreDuel.StartingHp);
+            HealthPresentation.Frame enemy = HealthPresentation.At(_onlineImpactAge,
+                _onlineBeforeEnemy, enemyHeal, enemyDamage, ScoreDuel.StartingHp);
+            SDApplyHealthFrame(_onlineOwnHpFill, _onlineOwnLoss, own, ScoreDuel.StartingHp, SDPlayerColor);
+            SDApplyHealthFrame(_onlineEnemyHpFill, _onlineEnemyLoss, enemy, ScoreDuel.StartingHp, SDEnemyColor);
+            _onlineOwnDamageShown = own.Damage;
+            _onlineEnemyDamageShown = enemy.Damage;
+            _onlineOwnHealShown = own.Heal;
+            _onlineEnemyHealShown = enemy.Heal;
+            SDSetOnlineHpLines(Mathf.RoundToInt(own.Hp), Mathf.RoundToInt(enemy.Hp));
             if (_onlineSmokeMode && !_onlineSmokeImpactCaptured && _onlineState.round == 1 &&
                 _onlineImpactAge > .38f && SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null)
             {
@@ -1124,7 +1133,7 @@ namespace ParvaMirabilia.Presentation
                 SmokeCapture((_onlineSmokeHost ? "host" : "guest") + "-online-contact");
             }
             _onlineHit.text = "";
-            if (_onlineImpactAge >= SharedAttackPresenter.Duration)
+            if (_onlineImpactAge >= HealthPresentation.End)
             {
                 _onlineImpactAge = -1; _onlineHit.text = "";
                 RefreshOnline();

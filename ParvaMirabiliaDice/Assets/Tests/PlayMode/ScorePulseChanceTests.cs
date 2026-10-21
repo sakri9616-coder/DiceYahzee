@@ -53,7 +53,7 @@ namespace ParvaMirabilia.Quality.Tests
                 tick.Invoke(_flow, advance); field.SetValue(_flow, advance[1]);
                 return label.rectTransform.localScale.x;
             }
-            float low = Sample(40), high = Sample(150);
+            float low = Sample(140), high = Sample(900);
             Assert.That(low, Is.GreaterThan(1.02f));
             Assert.That(high, Is.GreaterThan(low + .12f), "a top score needs visibly more scale than a modest one");
             object[] settle = {label, field.GetValue(_flow), 1f};

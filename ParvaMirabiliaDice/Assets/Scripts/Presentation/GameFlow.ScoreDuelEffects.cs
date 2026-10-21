@@ -15,7 +15,7 @@ namespace ParvaMirabilia.Presentation
         // Compatibility snapshots mirrored from the presenter per public test contract.
         private readonly Vector2[] _sdFxCenters = new Vector2[5];
         private RectTransform _sdFxRoot;
-        private ScoreHandEffectGraphic _sdFxGeometry;
+        private IScoreEffectSurface _sdFxGeometry;
         private Image[] _sdFxSparks = new Image[0];
         private Image _sdFxTraceHead;
         private int[] _sdFxPath = new int[5];
@@ -29,10 +29,10 @@ namespace ParvaMirabilia.Presentation
 
         // Chance particles have their own lifetime so formation effects cannot leave them behind.
         private RectTransform _sdChanceGlowRoot;
-        private ScoreHandEffectGraphic _sdChanceGlowGeometry;
+        private IScoreEffectSurface _sdChanceGlowGeometry;
         private float _sdChanceGlowAge;
         private RectTransform _onlineChanceGlowRoot;
-        private ScoreHandEffectGraphic _onlineChanceGlowGeometry;
+        private IScoreEffectSurface _onlineChanceGlowGeometry;
         private float _onlineChanceGlowAge;
         private static readonly Color SDFormationColor = new Color32(133, 237, 216, 255);
         private static readonly Color SDFormationPairColor = new Color32(247, 219, 165, 255);
@@ -58,8 +58,8 @@ namespace ParvaMirabilia.Presentation
             _sdFxGroups = _sdFxPresenter.Groups;
             // Chance stays behind the dice and cannot intercept a pointer gesture.
             _sdChanceGlowRoot = UiFactory.CreateStretch("ChanceGlow", _sdBattle);
-            _sdChanceGlowGeometry = _sdChanceGlowRoot.gameObject.AddComponent<ScoreHandEffectGraphic>();
-            _sdChanceGlowGeometry.raycastTarget = false;
+            _sdChanceGlowGeometry = UiFactory.AddVertexGraphic<ScoreHandEffectGraphic>(
+                _sdChanceGlowRoot.gameObject);
             _sdChanceGlowRoot.SetSiblingIndex(firstDie);
             _sdChanceGlowRoot.gameObject.SetActive(false);
         }
@@ -132,8 +132,8 @@ namespace ParvaMirabilia.Presentation
         {
             if (_onlineChanceGlowRoot != null || _onlineRoot == null) return;
             _onlineChanceGlowRoot = UiFactory.CreateStretch("OnlineChanceGlow", _onlineRoot);
-            _onlineChanceGlowGeometry = _onlineChanceGlowRoot.gameObject.AddComponent<ScoreHandEffectGraphic>();
-            _onlineChanceGlowGeometry.raycastTarget = false;
+            _onlineChanceGlowGeometry = UiFactory.AddVertexGraphic<ScoreHandEffectGraphic>(
+                _onlineChanceGlowRoot.gameObject);
             if (_onlineOwnDice[0] != null) _onlineChanceGlowRoot.SetSiblingIndex(_onlineOwnDice[0].GetSiblingIndex());
             _onlineChanceGlowRoot.gameObject.SetActive(false);
         }
@@ -157,7 +157,7 @@ namespace ParvaMirabilia.Presentation
             if (_onlineChanceGlowRoot != null) _onlineChanceGlowRoot.gameObject.SetActive(false);
         }
 
-        private void SDDrawChanceParticles(RectTransform root, ScoreHandEffectGraphic graphic,
+        private void SDDrawChanceParticles(RectTransform root, IScoreEffectSurface graphic,
             RectTransform[] dice, float age)
         {
             graphic.Clear();
@@ -221,7 +221,7 @@ namespace ParvaMirabilia.Presentation
     }
 
     /// <summary>A bounded stroke mesh for transient effects; never an input target.</summary>
-    internal sealed class ScoreHandEffectGraphic : MaskableGraphic
+    internal sealed class ScoreHandEffectGraphic : MaskableGraphic, IScoreEffectSurface
     {
         private struct Stroke { public Vector2 A, B; public float Width; public Color32 Color; }
         private readonly Stroke[] _strokes = new Stroke[512];
