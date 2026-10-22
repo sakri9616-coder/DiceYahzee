@@ -19,3 +19,13 @@
 /Builds/
 /logs/
 /.validation/
+
+# DICE&SCULL Unity-generated files
+/DiceAndScull/[Ll]ibrary/
+/DiceAndScull/[Tt]emp/
+/DiceAndScull/[Oo]bj/
+/DiceAndScull/[Ll]ogs/
+/DiceAndScull/[Uu]serSettings/
+/DiceAndScull/[Bb]uilds/
+/DiceAndScull/*.csproj
+/DiceAndScull/*.sln

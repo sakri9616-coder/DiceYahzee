@@ -1,0 +1,12 @@
+{
+  "name": "DiceAndScull.Tests",
+  "rootNamespace": "DiceAndScull.Tests",
+  "references": ["DiceAndScull.Runtime"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+  "noEngineReferences": true
+}
