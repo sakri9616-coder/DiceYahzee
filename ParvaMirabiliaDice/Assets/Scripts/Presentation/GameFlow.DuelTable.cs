@@ -17,6 +17,7 @@ namespace ParvaMirabilia.Presentation
             grain.uvRect = new Rect(0, 0, 2.5f, 1.5f); grain.raycastTarget = false;
             var light = UiFactory.CreateStretchPanel("TableLight", root, Color.white);
             light.sprite = UiFactory.VignetteSprite; light.color = new Color(1, 1, 1, .22f); light.raycastTarget = false;
+            TableAmbience.Build(root);
             return table;
         }
 

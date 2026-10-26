@@ -10,6 +10,18 @@ namespace ParvaMirabilia.Presentation
     {
         // Opt-in actual-player validation. It drives production buttons and compares every
         // resolved turn with an independent core instance; ordinary startup never runs this.
+        /// <summary>Waits until the impact and its health beat, freeze included, have both settled.</summary>
+        private IEnumerator SDSmokeImpactSettled()
+        {
+            float guard = 0f;
+            while ((_sdAttackAge >= 0 || _sdHpAge >= 0) && guard < 3f)
+            {
+                guard += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            yield return new WaitForSecondsRealtime(.05f);
+        }
+
         private IEnumerator ScoreDuelPlayerSmoke()
         {
             yield return new WaitForSecondsRealtime(2f);
@@ -23,11 +35,13 @@ namespace ParvaMirabilia.Presentation
             SmokeCheck(titleText.cachedTextGenerator.vertexCount > 4, "title generates visible lettering geometry");
             Click(_sdTitle, "Rules");
             yield return new WaitForEndOfFrame();
+            yield return new WaitForSecondsRealtime(.3f);   // the modal's entrance settles
             SmokeCapture("rules");
             Click(_sdRules, "CloseRules");
             Click(_sdTitle, "Practice");
             SmokeCheck(_sdEngine == null, "fixed practice is separate from a real match");
             SDTickGestureGuides(0);
+            yield return new WaitForSecondsRealtime(.3f);   // the modal's entrance settles
             SmokeCapture("practice-start");
             Click(_sdPractice, "PracticeDie0");
             Click(_sdPractice, "PracticeDie1");
@@ -230,10 +244,12 @@ namespace ParvaMirabilia.Presentation
             SmokeCheck(_sdEngine.History.Count == 0 && _sdEngine.RerollsLeft == 2 && SDArrayEquals(original, _sdEngine.PlayerDice),
                 "menu blocks keyboard, hold, reroll and commit");
             SmokeCheck(_sdSelectedKind == menuKind, "the menu also blocks mouse-wheel role selection");
+            yield return new WaitForSecondsRealtime(.3f);   // the modal's entrance settles
             SmokeCapture("menu");
             Click(_sdMenu, "Credits");
             SDCommit();
             SmokeCheck(_sdCredits.gameObject.activeSelf && _sdEngine.History.Count == 0, "credits remain a blocking modal");
+            yield return new WaitForSecondsRealtime(.3f);   // the modal's entrance settles
             SmokeCapture("credits");
             Click(_sdCredits, "CloseCredits");
 
@@ -329,10 +345,16 @@ namespace ParvaMirabilia.Presentation
                 SDSmokeCheckRightScoreChoices();
                 SmokeCapture("round-" + _sdEngine.Round + "-result");
                 if (_sdEngine.Round == 1) SmokeCapture("full-width-table-overlay-cards-used-enemy-role");
-                if (_sdEngine.Outcome != null) break;
-                // The attack is done at 0.90, but the health beat runs to 1.24. The next
-                // round must wait for the bar to settle instead of opening under the drop.
-                yield return new WaitForSecondsRealtime(.35f);
+                if (_sdEngine.Outcome != null)
+                {
+                    SmokeCheck(_sdKoStamp != null && _sdKoStamp.Showing, "the finishing blow stamps its verdict on the table");
+                    SmokeCapture("ko-stamp");
+                    break;
+                }
+                // The attack is done at 0.90, but the health beat runs to 1.24 plus the freeze
+                // on contact. The next round must wait for the bar to settle instead of opening
+                // under the drop.
+                yield return SDSmokeImpactSettled();
                 proof.NextRound(); proof.Roll();
                 SDSmokeTableClick();
                 SmokeCheck(_sdRolling, "round " + _sdEngine.Round + " begins with the same throw animation");
@@ -377,11 +399,16 @@ namespace ParvaMirabilia.Presentation
                 }
             }
             SmokeCheck(_sdEngine.Outcome != null && (_sdEngine.PlayerHp == 0 || _sdEngine.NpcHp == 0), "the match finishes by a knockout");
-            yield return new WaitForSecondsRealtime(.35f);
+            yield return SDSmokeImpactSettled();
             SDSmokeTableClick();
             SmokeCheck(_sdResult.gameObject.activeSelf, "the match leads to the result screen");
+            SmokeCheck(_sdCeremony != null && _sdCeremony.Playing, "the result screen opens with its ceremony");
+            yield return new WaitForSecondsRealtime(.5f);
+            SmokeCapture("match-result-burst");
+            yield return new WaitForSecondsRealtime(1.3f);
             SmokeCapture("match-result");
             Click(_sdResult, "Scorecard");
+            yield return new WaitForSecondsRealtime(.3f);   // the modal's entrance settles
             SmokeCapture("used-scorecard");
             Click(_sdSheet, "CloseSheet");
             Click(_sdResult, "Rematch");
@@ -431,7 +458,7 @@ namespace ParvaMirabilia.Presentation
             yield return new WaitForSecondsRealtime(.58f);
             SmokeCapture("hp-damage");
             SmokeCapture("saved-exchange");
-            yield return new WaitForSecondsRealtime(.35f);
+            yield return SDSmokeImpactSettled();
             SDSmokeTableClick();
             yield return new WaitForSecondsRealtime(.95f);
             bool holdsMatch = true;

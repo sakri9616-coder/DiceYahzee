@@ -45,6 +45,12 @@ namespace ParvaMirabilia.Presentation
 
         private readonly Image _face;
         private readonly Image _ring;
+        private readonly Image _shadow;
+        // Captured at the start of each throw rather than at construction: the material pass
+        // restyles the shadow after the die is built, and the throw must hand back that one.
+        private Vector2 _shadowHome;
+        private Color _shadowColor;
+        private bool _shadowMoved;
         private readonly Image[] _pips = new Image[7];
         private readonly Text _hiddenLabel;
         private readonly Text _badge;
@@ -60,6 +66,16 @@ namespace ParvaMirabilia.Presentation
         private const float ScrambleInterval = 0.07f;
         private const float PunchDuration = 0.16f;
         private const float PunchPeak = 1.16f;
+
+        // A throw is a body in the air, not a face being redrawn: while it scrambles the die hops
+        // twice, tilts and lets its shadow fall away beneath it, and on landing it squashes into
+        // the table and springs back. Purely visual - only the die's visible parts move, so the root's
+        // place, scale and rotation stay with the screens and presenters that already drive them.
+        private const float TumbleHop = .12f;
+        private const float TumbleTilt = 16f;
+        private const float LandDuration = .30f;
+        private float _landElapsed = -1f;
+        private RectTransform[] _body;
 
         /// <summary>How far a die rises when the pointer is on it. Six percent: a lift, not a jump.</summary>
         private const float HoverLift = 1.06f;
@@ -122,6 +138,9 @@ namespace ParvaMirabilia.Presentation
             shadow.sprite = UiFactory.RoundedSprite(shadowSpriteSize, shadowSpriteSize);
             shadow.color = new Color(0f, 0f, 0f, 0.35f);
             shadow.raycastTarget = false;
+            _shadow = shadow;
+            _shadowHome = shadowRect.anchoredPosition;
+            _shadowColor = shadow.color;
 
             // A hand die's ring pads it by 5 units per side; for the 19-unit carry dice that
             // reaches past their 27-unit pitch and fuses the whole rack into one band. Tiny
@@ -190,6 +209,11 @@ namespace ParvaMirabilia.Presentation
         /// </summary>
         public void BeginRoll(float stagger, float scramble)
         {
+            if (!_rolling && _shadow != null)
+            {
+                _shadowHome = _shadow.rectTransform.anchoredPosition;
+                _shadowColor = _shadow.color;
+            }
             _rolling = true;
             _rollElapsed = 0f;
             _scrambleClock = 0f;
@@ -211,14 +235,20 @@ namespace ParvaMirabilia.Presentation
                 }
 
                 if (_rollElapsed < _rollLandAt)
+                {
+                    ApplyTumble();
                     return;
+                }
 
                 _rolling = false;
                 Render(Value);
+                RestTumble();
                 _punchElapsed = 0f;
+                _landElapsed = Juice.ReducedMotion ? -1f : 0f;
                 return;
             }
 
+            TickLanding(deltaTime);
             if (_punchElapsed < 0f)
                 return;
 
@@ -233,6 +263,78 @@ namespace ParvaMirabilia.Presentation
                 // landed has to come back up, or the lift quietly disappears mid-round.
                 ApplyLift();
             }
+        }
+
+        /// <summary>
+        /// The parts a player sees - ring, face, material side - as opposed to the root and its
+        /// shadow. Tumble and squash move only these, so the root's scale, rotation and place stay
+        /// owned by the screens and presenters that already drive them.
+        /// </summary>
+        private RectTransform[] Body
+        {
+            get
+            {
+                if (_body != null) return _body;
+                var parts = new System.Collections.Generic.List<RectTransform>();
+                foreach (Transform child in transform)
+                    if (child.name != "Shadow" && child is RectTransform rect) parts.Add(rect);
+                _body = parts.ToArray();
+                return _body;
+            }
+        }
+
+        private void SetBody(Vector3 scale, float tilt)
+        {
+            Quaternion rotation = Quaternion.Euler(0f, 0f, tilt);
+            foreach (RectTransform part in Body)
+            {
+                part.localScale = scale;
+                part.localRotation = rotation;
+            }
+        }
+
+        /// <summary>Squash into the table on landing, then a damped spring back to square.</summary>
+        private void TickLanding(float deltaTime)
+        {
+            if (_landElapsed < 0f) return;
+            _landElapsed += deltaTime;
+            float land = Mathf.Clamp01(_landElapsed / LandDuration);
+            float give = 1f - Juice.EaseOutElastic(land);
+            SetBody(new Vector3(1f + .13f * give, 1f - .11f * give, 1f), 0f);
+            if (land >= 1f)
+            {
+                _landElapsed = -1f;
+                SetBody(Vector3.one, 0f);
+            }
+        }
+
+        /// <summary>The die in the air: two hops that shrink as it loses height, and a tilt that settles.</summary>
+        private void ApplyTumble()
+        {
+            if (Juice.ReducedMotion) return;
+            float progress = _rollLandAt > 0f ? Mathf.Clamp01(_rollElapsed / _rollLandAt) : 1f;
+            float decay = Mathf.Pow(1f - progress, .6f);
+            float height = Mathf.Abs(Mathf.Sin(progress * Mathf.PI * 2f)) * decay;
+            SetBody(Vector3.one * (1f + TumbleHop * height),
+                Juice.Wobble(_rollElapsed * 2.2f, Index * 1.7f) * TumbleTilt * decay);
+            if (_shadow != null)
+            {
+                _shadowMoved = true;
+                _shadow.rectTransform.anchoredPosition = _shadowHome + new Vector2(5f, -9f) * height;
+                Color shade = _shadowColor;
+                shade.a *= 1f - .45f * height;
+                _shadow.color = shade;
+            }
+        }
+
+        private void RestTumble()
+        {
+            _landElapsed = -1f;
+            SetBody(Vector3.one, 0f);
+            if (_shadow == null || !_shadowMoved) return;
+            _shadowMoved = false;
+            _shadow.rectTransform.anchoredPosition = _shadowHome;
+            _shadow.color = _shadowColor;
         }
 
         /// <summary>A small pop used for a die being marked, or thrown and settled.</summary>
@@ -285,6 +387,7 @@ namespace ParvaMirabilia.Presentation
             _punchElapsed = -1f;
             _hovered = false;
             transform.localScale = _baseScale;
+            RestTumble();
 
             for (int i = 0; i < _pips.Length; i++)
                 _pips[i].enabled = false;

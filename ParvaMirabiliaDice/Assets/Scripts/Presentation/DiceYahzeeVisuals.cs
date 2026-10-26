@@ -72,6 +72,7 @@ namespace ParvaMirabilia.Presentation
             button.colors = colors;
             button.transition = Selectable.Transition.ColorTint;
             UiFactory.SetButtonEnabled(button, button.interactable);
+            ButtonJuice.Attach(button);
         }
 
         public static void StyleDie(Transform die)
@@ -88,10 +89,12 @@ namespace ParvaMirabilia.Presentation
             }
             Image shadow = ChildImage(die, "Shadow");
             if (shadow != null)
-            {
-                ApplySprite(shadow, Art + "panel-flat");
-                shadow.color = new Color(0f, 0f, 0f, 0.24f);
-            }
+                // A soft contact shadow: a die rests on the leather instead of on a darker tile.
+                Surfaces.ApplySoftShadow(shadow, face.rectTransform.sizeDelta.x, 0.46f);
+            // Lit from above: the face brightens toward its top edge and deepens toward its foot.
+            TopLitShade faceLight = Surfaces.Shade<TopLitShade>(face);
+            faceLight.Lift = .05f;
+            faceLight.Sink = .13f;
             // Extra decoration never changes the original face, pips, hit target or root geometry.
             Image side = ChildImage(die, "MaterialSide");
             if (side == null)
@@ -103,6 +106,10 @@ namespace ParvaMirabilia.Presentation
             }
             ApplySprite(side, Art + "panel-flat");
             side.color = UiFactory.FromHex(0xA7, 0x9D, 0x89);
+            side.rectTransform.anchoredPosition = new Vector2(0f, -Mathf.Max(2f, face.rectTransform.sizeDelta.x * .035f));
+            TopLitShade sideLight = Surfaces.Shade<TopLitShade>(side);
+            sideLight.Lift = 0f;
+            sideLight.Sink = .28f;
             int faceIndex = face.transform.GetSiblingIndex();
             if (side.transform.GetSiblingIndex() < faceIndex) faceIndex--;
             side.transform.SetSiblingIndex(faceIndex);

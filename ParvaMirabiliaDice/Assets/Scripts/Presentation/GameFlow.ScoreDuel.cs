@@ -95,7 +95,8 @@ namespace ParvaMirabilia.Presentation
             if (_rulesRoot != null) _rulesRoot.gameObject.SetActive(false);
             Transform oldMenu = _canvasRoot.transform.Find("Menu");
             if (oldMenu != null) oldMenu.gameObject.SetActive(false);
-            _sdReducedMotion = PlayerPrefs.GetInt("arcane.reducedMotion", 0) != 0;
+            _sdReducedMotion = PlayerPrefs.GetInt(Juice.ReducedMotionKey, 0) != 0;
+            Juice.ReducedMotion = _sdReducedMotion;
 
             _sdRoot = UiFactory.CreateStretch("ScoreDuel", _canvasRoot.transform);
             SDBuildTableBackground(_sdRoot);
@@ -127,6 +128,7 @@ namespace ParvaMirabilia.Presentation
             // unclickable, and the mute toggle degenerates into the only working control.
             LiftAudioChrome();
             SDStyleRemainingScreens();
+            SDDressSurfaces();
             SDSelectOpponent(0);
             SDBackToTitle();
             BuildOnlineEntry();
@@ -216,6 +218,9 @@ namespace ParvaMirabilia.Presentation
                 die.SetValue(sample[i]); die.SetTint(DiceTint.Plain, i < 3); die.SetInteractable(false);
                 DiceYahzeeVisuals.StyleDie(_sdTitle.Find("ExampleDie" + i));
             }
+            var titleDice = new List<Transform>();
+            for (int i = 0; i < sample.Length; i++) titleDice.Add(_sdTitle.Find("ExampleDie" + i));
+            TitleIdle.Attach(_sdTitle, title, titleDice);
             var line = UiFactory.CreatePanel("Rule", _sdTitle, new Vector2(532, 1), new Vector2(0, -11), SDPositive);
             line.color = new Color(.8f,.66f,.42f,.3f);
             for (int i = 0; i < SDOpponentProfiles.Length; i++)
@@ -291,6 +296,7 @@ namespace ParvaMirabilia.Presentation
             _sdNpcHpLabel.transform.SetAsLastSibling();
             _sdPlayerHpLabel.transform.SetAsLastSibling();
             _sdToast.transform.SetAsLastSibling();
+            SDBuildKoStamp();
         }
 
         private void SDBuildLiveScorecard()
@@ -382,6 +388,7 @@ namespace ParvaMirabilia.Presentation
             _sdResultDetail = SDText("Detail", _sdResult, "", 24, new Vector2(0, 78), new Vector2(1000, 150));
             SDButton("Scorecard", _sdResult, new Vector2(0, -40), new Vector2(300, 46), "記録", 19, SDOpenSheet);
             SDBuildResultActions(_sdResult, SDStartMatch, SDBackToTitle, "Title", "タイトル", out _, out _);
+            SDBuildResultSummary();
         }
 
         private RectTransform SDModal(string name, string title, Vector2 size)
@@ -633,6 +640,7 @@ namespace ParvaMirabilia.Presentation
             SDSetHp(_sdEngine.PlayerHp, _sdEngine.NpcHp);
             SDShowHpDeltas(0);
             SDEvaluateHand(false);
+            SDAnnounceRound();
         }
 
         private void SDBeginThrow(bool[] throwing)
@@ -797,12 +805,13 @@ namespace ParvaMirabilia.Presentation
             _sdResult.gameObject.SetActive(true);
             bool draw = _sdEngine.Outcome.Result == MatchResult.Draw;
             _sdResultTitle.text = draw ? "奇跡" : MatchResults.DisplayName(_sdEngine.Outcome.Result);
-            _sdResultTitle.fontSize = draw ? 112 : 48;
+            _sdResultTitle.fontSize = draw ? 112 : 88;
             _sdResultTitle.color = draw ? SDMiracle : _sdEngine.Outcome.Result == MatchResult.NpcWin ? SDNegative : SDPositive;
             bool bothKo = _sdEngine.PlayerHp == 0 && _sdEngine.NpcHp == 0;
             var last = _sdEngine.LastRound;
-            _sdResultDetail.text = bothKo ? "同時KO\nあなた  " + last.PlayerRawHpAfter + "     相手  " + last.NpcRawHpAfter + "\nROUND " + _sdEngine.History.Count :
-                "あなた  " + _sdEngine.PlayerHp + "     相手  " + _sdEngine.NpcHp + "\n\nROUND " + _sdEngine.History.Count;
+            _sdResultDetail.text = bothKo ? "同時KO　あなた  " + last.PlayerRawHpAfter + "     相手  " + last.NpcRawHpAfter + "\nROUND " + _sdEngine.History.Count :
+                "あなた  " + _sdEngine.PlayerHp + "     相手  " + _sdEngine.NpcHp + "\nROUND " + _sdEngine.History.Count;
+            SDPlayResultCeremony(_sdEngine.Outcome.Result);
             SDClearSelection();
             SDRefreshScope();
         }
@@ -893,6 +902,8 @@ namespace ParvaMirabilia.Presentation
                 button.GetComponent<Image>().color = selected ? new Color32(193, 157, 95, 255) : new Color(1,1,1,.005f);
                 Text name = button.transform.Find("Name").GetComponent<Text>();
                 name.color = selected ? SDPaperInk : offer.IsAvailable ? SDRailInk : SDRailUsed;
+                // The multiplier tag follows the row: rail grey on the leather, ink on the brass.
+                button.transform.Find("Multiplier").GetComponent<Text>().color = selected ? SDPaperInk : offer.IsAvailable ? SDRailMuted : SDRailUsed;
                 _sdLiveValues[i].text = !offer.IsAvailable ? "—" : _sdRolling ? "·" : offer.Score.ToString();
                 _sdLiveValues[i].color = selected ? SDPaperInk : offer.IsAvailable ? SDRailInk : SDRailUsed;
                 _sdLiveMarkers[i].gameObject.SetActive(selected && !_sdRolling);
@@ -987,7 +998,8 @@ namespace ParvaMirabilia.Presentation
         private void SDToggleMotion()
         {
             _sdReducedMotion = !_sdReducedMotion;
-            PlayerPrefs.SetInt("arcane.reducedMotion", _sdReducedMotion ? 1 : 0);
+            Juice.ReducedMotion = _sdReducedMotion;
+            PlayerPrefs.SetInt(Juice.ReducedMotionKey, _sdReducedMotion ? 1 : 0);
             SDRefreshMotionLabel();
         }
         private void SDRefreshMotionLabel() => _sdMotionLabel.text = "成立時の動き：" + (_sdReducedMotion ? "控えめ" : "通常");
@@ -999,6 +1011,8 @@ namespace ParvaMirabilia.Presentation
         private void UpdateScoreDuelPresentation()
         {
             float dt = Time.deltaTime;
+            // The flag this screen reads is the one the feel layer reads too, whoever set it.
+            Juice.ReducedMotion = _sdReducedMotion;
             SDRefreshSoundSymbol();
             foreach (DiceView die in _sdDice) die.Tick(dt);
             SDTickNpcReplay(dt);
@@ -1061,7 +1075,7 @@ namespace ParvaMirabilia.Presentation
             }
             if (_sdHpAge >= 0 && _sdEngine != null && !SDModalOpen)
             {
-                _sdHpAge += dt;
+                _sdHpAge = _sdHpStop.Advance(_sdHpAge, dt, HealthPresentation.DamageStart, SDImpactHold());
                 SDTickHpPresentation(_sdHpAge);
                 if (_sdHpAge >= HealthPresentation.End)
                 {

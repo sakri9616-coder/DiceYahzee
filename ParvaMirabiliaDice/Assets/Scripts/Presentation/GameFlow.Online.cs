@@ -246,6 +246,7 @@ namespace ParvaMirabilia.Presentation
             _onlineResultTitle = SDBuildResultTitle(_onlineResult);
             _onlineResultDetail = SDText("Detail", _onlineResult, "", 24, new Vector2(0, 78), new Vector2(1000, 150));
             SDBuildResultActions(_onlineResult, RequestOnlineRematch, ReturnToOnlineLobby, "ReturnLobby", "ロビーに戻る", out _onlineRematch, out _onlineReturnLobby);
+            BuildOnlineFinale();
             _onlineResult.gameObject.SetActive(false);
         }
         private bool OnlineHelpOpen => _onlineHelp != null && _onlineHelp.gameObject.activeSelf;
@@ -640,6 +641,7 @@ namespace ParvaMirabilia.Presentation
             bool resultsReady = finished && _onlineResultsRevealed && _onlineImpactAge < 0 && !OnlineHelpOpen;
             _onlineResult.gameObject.SetActive(!_onlineLeaving && (resultsReady || _onlineStopped));
             _onlineResultTitle.text = _onlineStopped ? "対戦を中断しました" : !finished ? "" : _onlineState.winner == 2 ? "奇跡" : _onlineState.winner == OnlineMe ? "あなたの勝利" : "あなたの敗北";
+            SyncOnlineCeremony(_onlineResult.gameObject.activeSelf, finished);
             _onlineResultDetail.text = _onlineStopped ? "ロビーへ戻ってもう一度接続できます。" : !finished ? "" : _onlineRematchReady[OnlineMe] ? "相手の再戦を待っています" : "ROUND " + _onlineState.round.ToString("00");
             _onlineRematch.gameObject.SetActive(resultsReady && !_onlineStopped);
             _onlineReturnLobby.gameObject.SetActive(!_onlineLeaving && !_onlineConnecting && (_onlineStopped || resultsReady));
@@ -997,6 +999,7 @@ namespace ParvaMirabilia.Presentation
         }
         private void UpdateOnline()
         {
+            Juice.ReducedMotion = _sdReducedMotion;
             if (OnlineHelpOpen)
             {
                 CancelOnlinePointer();
@@ -1092,7 +1095,8 @@ namespace ParvaMirabilia.Presentation
         private void UpdateOnlineImpact()
         {
             if (_onlineImpactAge < 0 || _onlineState == null) return;
-            _onlineImpactAge += Time.unscaledDeltaTime;
+            if (_onlineImpactAge == 0) _onlineStop.Reset();
+            _onlineImpactAge = _onlineStop.Advance(_onlineImpactAge, Time.unscaledDeltaTime, SharedAttackPresenter.ContactTime, OnlineImpactHold());
             if (_onlineAttackPresenter == null) _onlineAttackPresenter = new SharedAttackPresenter(_onlineRoot);
             _onlineAttackPresenter.Sample(_onlineImpactAge);
             int ownDamage = OnlineRoundValue(_onlineState.damage, OnlineMe);
@@ -1106,6 +1110,7 @@ namespace ParvaMirabilia.Presentation
             {
                 _onlineContactPlayed = true;
                 GameAudio.Play(SDImpactSound(enemyDamage, ownDamage));
+                OnlineImpactContactStamp();
             }
             HealthPresentation.Frame own = HealthPresentation.At(_onlineImpactAge,
                 _onlineBeforeOwn, ownHeal, ownDamage, ScoreDuel.StartingHp);

@@ -51,6 +51,7 @@ namespace ParvaMirabilia.Presentation
         private void SDResetImpactPresentation()
         {
             if (_sdAttackPresenter != null) _sdAttackPresenter.Reset();
+            SDResetFinale();
             _sdImpactContact = false;
             _sdImpactTier = 0; _sdImpactDamage = 0; _sdImpactPunch = 0;
             _sdAttackAge = -1;
@@ -112,6 +113,7 @@ namespace ParvaMirabilia.Presentation
                 _sdImpactContact = true;
                 ScoreRound round = _sdEngine.LastRound;
                 GameAudio.Play(SDImpactSound(round.DamageToNpc, round.DamageToPlayer));
+                SDOnImpactContact();
             }
         }
     }

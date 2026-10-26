@@ -207,7 +207,7 @@ namespace ParvaMirabilia.Presentation
             if (_sdAttackAge < 0) return;
             // An opt-in smoke/test pin reproduces one authored age exactly across frames.
             if (_sdSmokeAttackAgeOverride.HasValue) _sdAttackAge = _sdSmokeAttackAgeOverride.Value;
-            else _sdAttackAge += dt;
+            else _sdAttackAge = _sdAttackStop.Advance(_sdAttackAge, dt, SDImpactContactDelay, SDImpactHold());
             if (SDModalOpen)
             {
                 // Modal interrupted the attack: reset/hide the visuals but keep the age clock
