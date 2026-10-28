@@ -62,6 +62,8 @@ namespace ParvaMirabilia.Presentation
                 _sdChanceGlowRoot.gameObject);
             _sdChanceGlowRoot.SetSiblingIndex(firstDie);
             _sdChanceGlowRoot.gameObject.SetActive(false);
+            // Keeps the formation name legible over enlarged dice and their rings.
+            TextBackplate.Attach(_sdToast);
         }
 
         private bool SDIsReducedMotion() => _sdReducedMotion;

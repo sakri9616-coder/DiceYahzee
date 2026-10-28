@@ -68,6 +68,7 @@ namespace ParvaMirabilia.Presentation
             marker.raycastTarget = false;
             var rule = UiFactory.CreatePanel("RowRule", root, new Vector2(186, 1), position + Vector2.down * 19, SDRailRule);
             rule.raycastTarget = false;
+            RowHoverWash.Attach(button);
             return button;
         }
 
