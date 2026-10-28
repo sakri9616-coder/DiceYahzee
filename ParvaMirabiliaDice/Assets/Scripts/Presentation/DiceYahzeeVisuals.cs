@@ -73,6 +73,7 @@ namespace ParvaMirabilia.Presentation
             button.transition = Selectable.Transition.ColorTint;
             UiFactory.SetButtonEnabled(button, button.interactable);
             ButtonJuice.Attach(button);
+            FocusFrame.Attach(button);
         }
 
         public static void StyleDie(Transform die)
