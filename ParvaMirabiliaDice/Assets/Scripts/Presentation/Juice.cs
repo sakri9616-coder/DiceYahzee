@@ -104,7 +104,11 @@ namespace ParvaMirabilia.Presentation
             _restCaptured = true;
         }
 
-        public void OnPointerEnter(PointerEventData eventData) { _hovered = true; }
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            _hovered = true;
+            if (_selectable == null || _selectable.IsInteractable()) GameAudio.PlayHover();
+        }
         public void OnPointerExit(PointerEventData eventData) { _hovered = false; _pressed = false; }
         public void OnPointerDown(PointerEventData eventData) { if (eventData.button == PointerEventData.InputButton.Left) _pressed = true; }
         public void OnPointerUp(PointerEventData eventData) { _pressed = false; }

@@ -67,6 +67,7 @@ namespace ParvaMirabilia.Presentation
             _label.text = verdict;
             _age = 0f;
             gameObject.SetActive(true);
+            GameAudio.Play("stamp");
             Sample();
         }
 

@@ -42,6 +42,44 @@ namespace ParvaMirabilia.Presentation
             { "formation", 1.5f }
         };
 
+        /// <summary>
+        /// Clips that are played through the voice pool with a small random pitch and level, so a
+        /// run of identical die clicks or hits stops sounding like a loop. Values are the pitch and
+        /// level spread either way. The result stings are left out: they must sound the same.
+        /// </summary>
+        private static readonly Dictionary<string, Vector2> Variation = new Dictionary<string, Vector2>
+        {
+            { "dice_roll", new Vector2(.06f, .10f) },
+            { "die_keep", new Vector2(.08f, .12f) },
+            { "ui_click", new Vector2(.05f, .08f) },
+            { "ui_hover", new Vector2(.07f, .15f) },
+            { "tick", new Vector2(.03f, .12f) },
+            { "hit", new Vector2(.05f, .06f) },
+            { "guard", new Vector2(.05f, .06f) },
+            { "hurt", new Vector2(.05f, .06f) },
+            { "commit", new Vector2(.025f, .05f) },
+            { "formation", new Vector2(.02f, .05f) },
+            { "stamp", new Vector2(.02f, 0f) }
+        };
+
+        /// <summary>How deep the music dips under each big moment, and for how long it holds.</summary>
+        private static readonly Dictionary<string, Vector2> DuckOn = new Dictionary<string, Vector2>
+        {
+            { "hit", new Vector2(.6f, .35f) },
+            { "hurt", new Vector2(.6f, .35f) },
+            { "stamp", new Vector2(.3f, 1.3f) },
+            { "win", new Vector2(.35f, 2.6f) },
+            { "lose", new Vector2(.35f, 2.6f) },
+            { "fanfare", new Vector2(.35f, 2.2f) },
+            { "toll", new Vector2(.35f, 2.2f) }
+        };
+
+        private const int VoiceCount = 6;
+        private readonly AudioSource[] _voices = new AudioSource[VoiceCount];
+        private readonly float[] _voiceEnds = new float[VoiceCount];
+        private int _nextVoice;
+        private readonly Dictionary<string, float> _lastPlayed = new Dictionary<string, float>();
+        private float _duck = 1f, _duckDepth = 1f, _duckUntil;
         private readonly Dictionary<string, AudioClip> _clips = new Dictionary<string, AudioClip>();
         private readonly Dictionary<string, float> _gains = new Dictionary<string, float>();
         private AudioSource _bgmSource;
@@ -77,6 +115,13 @@ namespace ParvaMirabilia.Presentation
             _sfxSource = gameObject.AddComponent<AudioSource>();
             _sfxSource.playOnAwake = false;
 
+            // Added after the BGM and main SFX sources so their component order never changes.
+            for (int i = 0; i < VoiceCount; i++)
+            {
+                _voices[i] = gameObject.AddComponent<AudioSource>();
+                _voices[i].playOnAwake = false;
+            }
+
             for (int i = 0; i < ClipNames.Length; i++)
             {
                 var clip = Resources.Load<AudioClip>("Audio/" + ClipNames[i]);
@@ -86,6 +131,13 @@ namespace ParvaMirabilia.Presentation
                 float gain;
                 _clips[ClipNames[i]] = PrepareSfx(ClipNames[i], clip, out gain);
                 _gains[ClipNames[i]] = gain;
+            }
+
+            foreach (ProceduralSfx.Entry entry in ProceduralSfx.Build())
+            {
+                if (entry.Clip == null || _clips.ContainsKey(entry.Name)) continue;
+                _clips[entry.Name] = entry.Clip;
+                _gains[entry.Name] = entry.Gain;
             }
 
             _volume = PlayerPrefs.HasKey("pv.audioVolume")
@@ -178,9 +230,115 @@ namespace ParvaMirabilia.Presentation
             if (!Instance._gains.TryGetValue(clipName, out gain))
                 gain = 1f;
 
+            Vector2 duck;
+            if (DuckOn.TryGetValue(clipName, out duck))
+                Duck(duck.x, duck.y);
+
             // volumeScale is a multiplier, so gains above 1 are allowed; PrepareSfx already
             // capped the gain so the result stays below the clipping point.
-            Instance._sfxSource.PlayOneShot(clip, Mathf.Max(0f, gain));
+            Vector2 spread;
+            if (!Variation.TryGetValue(clipName, out spread))
+            {
+                Instance._sfxSource.PlayOneShot(clip, Mathf.Max(0f, gain));
+                return;
+            }
+
+            float pitch = 1f + UnityEngine.Random.Range(-spread.x, spread.x);
+            float level = 1f + UnityEngine.Random.Range(-spread.y, spread.y);
+            Instance.PlayVoice(clip, Mathf.Max(0f, gain * level), pitch);
+        }
+
+        /// <summary>Plays a clip only if the same clip has not started within the interval.</summary>
+        public static void PlayThrottled(string clipName, float minInterval)
+        {
+            if (Instance == null)
+                return;
+            float now = Time.unscaledTime;
+            float last;
+            if (Instance._lastPlayed.TryGetValue(clipName, out last) && now - last < minInterval)
+                return;
+            Instance._lastPlayed[clipName] = now;
+            Play(clipName);
+        }
+
+        /// <summary>The pointer arriving on a live button: a quiet tap, never stacked.</summary>
+        public static void PlayHover()
+        {
+            PlayThrottled("ui_hover", .07f);
+        }
+
+        /// <summary>One tick of a counting figure; the pitch climbs with the count's progress.</summary>
+        public static void PlayTick(float progress)
+        {
+            if (Instance == null)
+                return;
+            float now = Time.unscaledTime;
+            float last;
+            if (Instance._lastPlayed.TryGetValue("tick", out last) && now - last < .05f)
+                return;
+            AudioClip clip;
+            if (!Instance._clips.TryGetValue("tick", out clip) || clip == null)
+                return;
+            Instance._lastPlayed["tick"] = now;
+            float gain;
+            if (!Instance._gains.TryGetValue("tick", out gain))
+                gain = 1f;
+            float pitch = Mathf.Lerp(.85f, 1.45f, Mathf.Clamp01(progress)) + UnityEngine.Random.Range(-.02f, .02f);
+            Instance.PlayVoice(clip, gain, pitch);
+        }
+
+        /// <summary>
+        /// Lowers the music to <paramref name="depth"/> of its level for <paramref name="hold"/>
+        /// seconds, then lets it swell back. Overlapping calls keep the deeper dip and the later end.
+        /// </summary>
+        public static void Duck(float depth, float hold)
+        {
+            if (Instance == null)
+                return;
+            float now = Time.unscaledTime;
+            if (now >= Instance._duckUntil)
+                Instance._duckDepth = 1f;
+            Instance._duckDepth = Mathf.Min(Instance._duckDepth, Mathf.Clamp01(depth));
+            Instance._duckUntil = Mathf.Max(Instance._duckUntil, now + Mathf.Max(0f, hold));
+        }
+
+        private void PlayVoice(AudioClip clip, float volumeScale, float pitch)
+        {
+            // Pitch is per source, so each varied sound gets a voice of its own; six voices cover
+            // the busiest overlap (roll, keep, hit, stamp) without cutting a tail short.
+            // A free voice is preferred; when all are busy the one closest to finishing is reused.
+            float now = Time.unscaledTime;
+            int pick = _nextVoice;
+            for (int k = 0; k < VoiceCount; k++)
+            {
+                int i = (_nextVoice + k) % VoiceCount;
+                if (_voiceEnds[i] <= now) { pick = i; break; }
+                if (_voiceEnds[i] < _voiceEnds[pick]) pick = i;
+            }
+            _nextVoice = (pick + 1) % VoiceCount;
+            AudioSource voice = _voices[pick];
+            if (voice == null)
+            {
+                _sfxSource.PlayOneShot(clip, volumeScale);
+                return;
+            }
+            pitch = Mathf.Clamp(pitch, .5f, 2f);
+            voice.Stop();
+            voice.pitch = pitch;
+            voice.PlayOneShot(clip, volumeScale);
+            _voiceEnds[pick] = now + clip.length / pitch;
+        }
+
+        private void Update()
+        {
+            float target = Time.unscaledTime < _duckUntil ? _duckDepth : 1f;
+            if (Mathf.Approximately(_duck, target))
+                return;
+            // A fast dip and a slow swell back, like a sidechain on the music bus.
+            float rate = target < _duck ? 14f : 1.6f;
+            _duck = Mathf.MoveTowards(_duck, target, rate * Mathf.Min(Time.unscaledDeltaTime, .1f));
+            if (_bgmSource != null)
+                _bgmSource.volume = Mathf.Clamp01(_volume * BgmGain * _duck);
         }
 
         /// <summary>
@@ -376,7 +534,9 @@ namespace ParvaMirabilia.Presentation
         {
             float volume = _volume;
             _sfxSource.volume = Mathf.Clamp01(volume);
-            _bgmSource.volume = Mathf.Clamp01(volume * BgmGain);
+            for (int i = 0; i < _voices.Length; i++)
+                if (_voices[i] != null) _voices[i].volume = Mathf.Clamp01(volume);
+            _bgmSource.volume = Mathf.Clamp01(volume * BgmGain * _duck);
 
             if (volume <= 0.001f)
                 _bgmSource.Pause();
