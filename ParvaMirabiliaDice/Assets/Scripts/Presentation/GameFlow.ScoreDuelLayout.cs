@@ -306,6 +306,7 @@ namespace ParvaMirabilia.Presentation
         {
             SDSetTableHp(fill, frame.Hp, maximum);
             SDAnimateHpLoss(fill, band, frame.LossFrom, frame.LossTo, maximum, baseColor, frame.LossAlpha);
+            HealMotes.Feed(fill, frame, maximum);
         }
 
         /// <summary>

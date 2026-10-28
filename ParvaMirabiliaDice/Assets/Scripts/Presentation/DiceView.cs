@@ -88,6 +88,19 @@ namespace ParvaMirabilia.Presentation
         private bool _hovered;
         private readonly Vector3 _baseScale;
 
+        // ---- halo -------------------------------------------------------------
+        // A soft plate of light behind the die that blooms outward and fades: gold when the die
+        // is kept, a dim inward breath when it is let go, and a faint white ring of dust when a
+        // throw lands. It is created on first use, sits behind the ring, never takes a click and
+        // is inactive at rest; under reduced motion it never shows.
+        private Image _halo;
+        private float _haloElapsed = -1f, _haloDuration = 1f;
+        private float _haloFrom = 1f, _haloTo = 1f, _haloAlpha;
+        private Color _haloColor;
+        private bool _keepShown;
+        private bool _keepChangeOn;
+        private int _keepChangeFrame = -1, _punchFrame = -1;
+
         public int Index { get; private set; }
         public int Value { get; private set; }
 
@@ -224,6 +237,7 @@ namespace ParvaMirabilia.Presentation
         /// <summary>Advances the throw and the landing punch. Called once a frame by the screen.</summary>
         public void Tick(float deltaTime)
         {
+            TickHalo(deltaTime);
             if (_rolling)
             {
                 _rollElapsed += deltaTime;
@@ -245,6 +259,7 @@ namespace ParvaMirabilia.Presentation
                 RestTumble();
                 _punchElapsed = 0f;
                 _landElapsed = Juice.ReducedMotion ? -1f : 0f;
+                StartHalo(new Color(1f, .97f, .88f), 1f, 1.3f, .30f, .26f);
                 return;
             }
 
@@ -277,7 +292,7 @@ namespace ParvaMirabilia.Presentation
                 if (_body != null) return _body;
                 var parts = new System.Collections.Generic.List<RectTransform>();
                 foreach (Transform child in transform)
-                    if (child.name != "Shadow" && child is RectTransform rect) parts.Add(rect);
+                    if (child.name != "Shadow" && child.name != "KeepHalo" && child is RectTransform rect) parts.Add(rect);
                 _body = parts.ToArray();
                 return _body;
             }
@@ -341,6 +356,60 @@ namespace ParvaMirabilia.Presentation
         public void Punch()
         {
             _punchElapsed = 0f;
+            _punchFrame = Time.frameCount;
+            if (_keepChangeFrame == _punchFrame) StartKeepHalo();
+        }
+
+        /// <summary>
+        /// The keep mark and the click's punch arrive in the same frame only when a player toggled
+        /// this die; a refresh that merely repaints the ring never blooms.
+        /// </summary>
+        private void StartKeepHalo()
+        {
+            _keepChangeFrame = -1;
+            if (_keepChangeOn) StartHalo(UiFactory.Gold, 1f, 1.55f, .9f, .36f);
+            else StartHalo(UiFactory.GoldDim, 1.2f, .98f, .45f, .2f);
+        }
+
+        private void StartHalo(Color color, float from, float to, float alpha, float duration)
+        {
+            if (Juice.ReducedMotion) { StopHalo(); return; }
+            if (_halo == null)
+            {
+                float pad = _size < 32f ? 3f : 5f;
+                var rect = UiFactory.CreateRect("KeepHalo", transform, new Vector2(_size + pad * 2f, _size + pad * 2f), Vector2.zero);
+                rect.SetSiblingIndex(Mathf.Min(1, rect.parent.childCount - 1));
+                _halo = rect.gameObject.AddComponent<Image>();
+                _halo.sprite = _ring.sprite;
+                _halo.raycastTarget = false;
+            }
+            _haloColor = color;
+            _haloFrom = from;
+            _haloTo = to;
+            _haloAlpha = alpha;
+            _haloDuration = Mathf.Max(.01f, duration);
+            _haloElapsed = 0f;
+            _halo.gameObject.SetActive(true);
+            TickHalo(0f);
+        }
+
+        private void TickHalo(float deltaTime)
+        {
+            if (_haloElapsed < 0f || _halo == null) return;
+            if (Juice.ReducedMotion) { StopHalo(); return; }
+            _haloElapsed += deltaTime;
+            float t = Mathf.Clamp01(_haloElapsed / _haloDuration);
+            _halo.rectTransform.localScale = Vector3.one * Mathf.LerpUnclamped(_haloFrom, _haloTo, Juice.EaseOutCubic(t));
+            Color color = _haloColor;
+            color.a = _haloAlpha * (1f - t) * (1f - t);
+            _halo.color = color;
+            if (t >= 1f) StopHalo();
+        }
+
+        private void StopHalo()
+        {
+            _haloElapsed = -1f;
+            if (_halo != null) _halo.gameObject.SetActive(false);
         }
 
         private void ShowScrambleFace()
@@ -388,6 +457,9 @@ namespace ParvaMirabilia.Presentation
             _hovered = false;
             transform.localScale = _baseScale;
             RestTumble();
+            StopHalo();
+            _keepShown = false;
+            _keepChangeFrame = -1;
 
             for (int i = 0; i < _pips.Length; i++)
                 _pips[i].enabled = false;
@@ -448,6 +520,14 @@ namespace ParvaMirabilia.Presentation
 
             if (keepHighlight && tint != DiceTint.Plain)
                 _ring.color = UiFactory.Gold;
+
+            if (keepHighlight != _keepShown)
+            {
+                _keepShown = keepHighlight;
+                _keepChangeOn = keepHighlight;
+                _keepChangeFrame = Time.frameCount;
+                if (_punchFrame == _keepChangeFrame) StartKeepHalo();
+            }
         }
 
         public void SetInteractable(bool interactable)
