@@ -108,6 +108,7 @@ namespace ParvaMirabilia.Presentation
         {
             if (_sdAttackPresenter == null) return;
             _sdAttackPresenter.Sample(_sdAttackAge);
+            SDCueHealSound();
             if (!_sdImpactContact && _sdAttackPresenter.HasStruck)
             {
                 _sdImpactContact = true;

@@ -52,6 +52,7 @@ namespace ParvaMirabilia.Presentation
             public string Prefix, Suffix;
             public int Target;
             public float Delay;
+            public int LastShown = -1;
         }
 
         public float Age => _age;
@@ -124,6 +125,9 @@ namespace ParvaMirabilia.Presentation
             _rays.gameObject.SetActive(mood != Mood.Neutral);
             _glow.gameObject.SetActive(mood != Mood.Neutral);
             if (!Juice.ReducedMotion) Burst(mood);
+            // A synthesised sting layered over the recorded win/lose clip.
+            if (mood == Mood.Victory || mood == Mood.Miracle) GameAudio.Play("fanfare");
+            else if (mood == Mood.Defeat) GameAudio.Play("toll");
             Sample();
         }
 
@@ -235,6 +239,9 @@ namespace ParvaMirabilia.Presentation
                 float t = reduced ? 1f : Mathf.Clamp01((_age - counter.Delay) / .8f);
                 int shown = Mathf.RoundToInt(counter.Target * Juice.EaseOutCubic(t));
                 counter.Label.text = counter.Prefix + shown + counter.Suffix;
+                // Ticks follow the figure as it climbs; the first sample only sets the baseline.
+                if (shown != counter.LastShown && counter.LastShown >= 0 && !reduced) GameAudio.PlayTick(t);
+                counter.LastShown = shown;
             }
         }
 
