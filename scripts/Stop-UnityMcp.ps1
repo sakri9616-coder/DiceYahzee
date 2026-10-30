@@ -1,5 +1,5 @@
 param(
-    [string]$StatePath = "D:\MimoGame\logs\unity-mcp.state.json",
+    [string]$StatePath = "F:\MimoGame\logs\unity-mcp.state.json",
     [int]$TimeoutSec = 90
 )
 

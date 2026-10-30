@@ -10,7 +10,7 @@ namespace ParvaMirabilia.Editor
     /// its captures verify builds, while editor Play Mode had no visual verification at all.
     /// Publishing an output directory through the ArcaneSmokeOutput variable lets the same
     /// production smoke drive itself inside an editor play session and drop the same PNG
-    /// evidence (attack phases, yaku effects, HP and layout) into D:\MimoGame\logs.
+    /// evidence (attack phases, yaku effects, HP and layout) into F:\MimoGame\logs.
     /// </summary>
     public static class SmokeMenu
     {

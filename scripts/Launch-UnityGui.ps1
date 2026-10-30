@@ -1,8 +1,8 @@
 param(
     [string]$EditorPath = "C:\Program Files\Unity\Hub\Editor\6000.3.25f1\Editor\Unity.exe",
-    [string]$ProjectPath = "D:\MimoGame\ParvaMirabiliaDice",
-    [string]$LogPath = "D:\MimoGame\logs\preflight-gui.log",
-    [string]$ShotPath = "D:\MimoGame\logs\preflight-editor-window.png",
+    [string]$ProjectPath = "F:\MimoGame\ParvaMirabiliaDice",
+    [string]$LogPath = "F:\MimoGame\logs\preflight-gui.log",
+    [string]$ShotPath = "F:\MimoGame\logs\preflight-editor-window.png",
     [int]$ReadyTimeoutSec = 600,
     [int]$CloseTimeoutSec = 90
 )

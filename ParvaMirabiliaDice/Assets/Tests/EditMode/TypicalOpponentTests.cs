@@ -38,7 +38,7 @@ namespace ParvaMirabilia.Tests
         /// <summary>How far the assumption may sit from the measurement before it is a fiction.</summary>
         private const double Tolerance = 1.0;
 
-        private const string ReportPath = @"D:\MimoGame\logs\typical-opponent-report.json";
+        private const string ReportPath = @"F:\MimoGame\logs\typical-opponent-report.json";
 
         private static readonly NpcArchetype[] Archetypes =
         {

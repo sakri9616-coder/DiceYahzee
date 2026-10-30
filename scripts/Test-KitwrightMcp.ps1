@@ -2,7 +2,7 @@ param(
     [int]$Port = 9445,
     [string]$Url = "",
     [int]$TimeoutMinutes = 8,
-    [string]$StatePath = "D:\MimoGame\logs\unity-mcp.state.json"
+    [string]$StatePath = "F:\MimoGame\logs\unity-mcp.state.json"
 )
 
 $ErrorActionPreference = "Continue"

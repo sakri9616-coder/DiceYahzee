@@ -63,7 +63,7 @@ namespace ParvaMirabilia.Tests
 
         private static readonly string[] HpStateNames = { "均勢", "優勢", "劣勢" };
 
-        private const string ReportPath = @"D:\MimoGame\logs\yaku-appeal-report.json";
+        private const string ReportPath = @"F:\MimoGame\logs\yaku-appeal-report.json";
 
         [Test]
         public void EveryYakuIsOfferedAndNoSingleYakuOwnsTheMatch()

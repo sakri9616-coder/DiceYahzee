@@ -1,6 +1,6 @@
 param(
     [string]$Url = "http://127.0.0.1:9445/p/daf7e34c/t/abd7e501f52a350f31297acd9ee831de/",
-    [string]$OutDir = "D:\MimoGame\logs"
+    [string]$OutDir = "F:\MimoGame\logs"
 )
 $ErrorActionPreference = "Stop"
 if (-not $Url.EndsWith("/")) { $Url += "/" }

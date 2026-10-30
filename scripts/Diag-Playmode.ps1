@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$l = 'D:\MimoGame\logs\playmode-run.log'
+$l = 'F:\MimoGame\logs\playmode-run.log'
 $lines = Get-Content -LiteralPath $l
 Write-Output ('lines=' + $lines.Count)
 # Show the interesting window: everything after the compile output that is not audio spam.

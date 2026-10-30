@@ -1,9 +1,9 @@
 param(
     [string]$EditorPath = "C:\Program Files\Unity\Hub\Editor\6000.3.25f1\Editor\Unity.exe",
-    [string]$ProjectPath = "D:\MimoGame\ParvaMirabiliaDice",
-    [string]$LogPath = "D:\MimoGame\logs\unity-mcp.log",
-    [string]$ShotPath = "D:\MimoGame\logs\unity-mcp-window.png",
-    [string]$StatePath = "D:\MimoGame\logs\unity-mcp.state.json",
+    [string]$ProjectPath = "F:\MimoGame\ParvaMirabiliaDice",
+    [string]$LogPath = "F:\MimoGame\logs\unity-mcp.log",
+    [string]$ShotPath = "F:\MimoGame\logs\unity-mcp-window.png",
+    [string]$StatePath = "F:\MimoGame\logs\unity-mcp.state.json",
     [int]$ReadyTimeoutSec = 600,
     [int]$McpTimeoutSec = 300,
     [switch]$NoScreenshot,

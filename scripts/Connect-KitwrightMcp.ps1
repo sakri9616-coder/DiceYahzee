@@ -1,7 +1,7 @@
 param(
-    [string]$ProjectPath = "D:\MimoGame\ParvaMirabiliaDice",
+    [string]$ProjectPath = "F:\MimoGame\ParvaMirabiliaDice",
     [int]$TimeoutMinutes = 12,
-    [string]$StatePath = "D:\MimoGame\logs\unity-mcp.state.json",
+    [string]$StatePath = "F:\MimoGame\logs\unity-mcp.state.json",
     [string]$CliPath = "C:\Users\sakur\AppData\Roaming\ai.opencode.desktop\cli\2.0.26\opencode-cli.exe"
 )
 
@@ -80,7 +80,7 @@ if (-not $ok) {
 Log "MCP ready at $url"
 
 # --- rewrite the OpenCode project config -------------------------------------
-$cfgPath = "D:\MimoGame\opencode.json"
+$cfgPath = "F:\MimoGame\opencode.json"
 $cfg = Get-Content $cfgPath -Raw | ConvertFrom-Json
 if (-not $cfg.mcp) { $cfg | Add-Member -NotePropertyName mcp -NotePropertyValue ([pscustomobject]@{ servers = [pscustomobject]@{} }) }
 if (-not $cfg.mcp.servers) { $cfg.mcp | Add-Member -NotePropertyName servers -NotePropertyValue ([pscustomobject]@{}) }

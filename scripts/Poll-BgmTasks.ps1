@@ -4,7 +4,7 @@ $raw = (& $cli auth export 2>&1 | Out-String)
 $j = $raw | ConvertFrom-Json
 if ($j -isnot [array]) { $j = @($j) }
 $key = ($j | Where-Object { $_.integrationID -eq 'stepfun' } | Select-Object -First 1).value.key
-$tasks = Get-Content -LiteralPath 'D:\MimoGame\logs\bgm-tasks.json' -Raw | ConvertFrom-Json
+$tasks = Get-Content -LiteralPath 'F:\MimoGame\logs\bgm-tasks.json' -Raw | ConvertFrom-Json
 
 function Query-One($id) {
     $body = '{"task_id":"' + $id + '"}'
@@ -39,7 +39,7 @@ for ($i = 1; $i -le 12; $i++) {
             elseif ($o.url) { $tail = ' url=' + $o.url }
             Write-Output ('[' + $i + '] ' + $t.name + ' :: ' + $st + $tail)
             if ($tail -ne '') {
-                $o | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath ('D:\MimoGame\logs\bgm-' + $t.name + '-result.json') -Encoding UTF8
+                $o | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath ('F:\MimoGame\logs\bgm-' + $t.name + '-result.json') -Encoding UTF8
             }
         }
         catch {

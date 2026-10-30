@@ -8,7 +8,7 @@ $j = $raw | ConvertFrom-Json
 if ($j -isnot [array]) { $j = @($j) }
 $key = ($j | Where-Object { $_.integrationID -eq 'stepfun' } | Select-Object -First 1).value.key
 
-$tasks = Get-Content -LiteralPath 'D:\MimoGame\logs\bgm-tasks.json' -Raw | ConvertFrom-Json
+$tasks = Get-Content -LiteralPath 'F:\MimoGame\logs\bgm-tasks.json' -Raw | ConvertFrom-Json
 $task = @($tasks) | Where-Object { $_.name -eq 'bgm_duel' } | Select-Object -First 1
 if (-not $task) { $task = @($tasks)[0] }
 
@@ -44,8 +44,8 @@ if (-not $b64) { Write-Output 'NO AUDIO FIELD'; exit 1 }
 $mp3 = [System.Convert]::FromBase64String($b64)
 Write-Output ('decoded bytes=' + $mp3.Length)
 
-$audio  = 'D:\MimoGame\ParvaMirabiliaDice\Assets\Resources\Audio\bgm_duel.mp3'
-$backup = 'D:\MimoGame\logs\bgm_candidates\bgm_duel_gen-9s.mp3'
+$audio  = 'F:\MimoGame\ParvaMirabiliaDice\Assets\Resources\Audio\bgm_duel.mp3'
+$backup = 'F:\MimoGame\logs\bgm_candidates\bgm_duel_gen-9s.mp3'
 if (-not (Test-Path -LiteralPath $backup)) {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $backup) | Out-Null
     Copy-Item -LiteralPath $audio -Destination $backup -Force

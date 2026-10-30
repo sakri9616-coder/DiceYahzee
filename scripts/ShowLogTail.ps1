@@ -1,5 +1,5 @@
 param(
-    [string]$Path = "D:\MimoGame\logs\test-run.log",
+    [string]$Path = "F:\MimoGame\logs\test-run.log",
     [int]$Tail = 80
 )
 

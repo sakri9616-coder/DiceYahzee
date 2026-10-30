@@ -6,7 +6,7 @@ param(
     [string]$Mode,
 
     [string]$PromptFile = '',
-    [string]$OutDir = 'D:\MimoGame\ParvaMirabiliaDice\Assets\Audio',
+    [string]$OutDir = 'F:\MimoGame\ParvaMirabiliaDice\Assets\Audio',
     [string]$Model = 'step-5-preview'
 )
 
@@ -115,12 +115,12 @@ function Submit-Bgm {
             Write-Output ("SUBMIT_FAIL " + $it.name + " :: " + $_.Exception.Message.Substring(0, [Math]::Min(300, $_.Exception.Message.Length)))
         }
     }
-    $tasks | ConvertTo-Json | Out-File -FilePath 'D:\MimoGame\logs\bgm-tasks.json' -Encoding utf8
+    $tasks | ConvertTo-Json | Out-File -FilePath 'F:\MimoGame\logs\bgm-tasks.json' -Encoding utf8
 }
 
 function Poll-Bgm {
     if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Force | Out-Null }
-    $tasks = Get-Content -LiteralPath 'D:\MimoGame\logs\bgm-tasks.json' -Raw | ConvertFrom-Json
+    $tasks = Get-Content -LiteralPath 'F:\MimoGame\logs\bgm-tasks.json' -Raw | ConvertFrom-Json
     if ($tasks -isnot [array]) { $tasks = @($tasks) }
     $deadline = (Get-Date).AddMinutes(12)
     $pending = @{}

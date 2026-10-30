@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$dir = 'D:\MimoGame\logs'
+$dir = 'F:\MimoGame\logs'
 $file = Get-ChildItem -LiteralPath $dir -Filter 'oplog-*.jsonl' |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
 Write-Output ('file=' + $file.Name + ' bytes=' + $file.Length + ' at=' + $file.LastWriteTime)

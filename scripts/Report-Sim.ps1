@@ -1,8 +1,8 @@
 # Prints a side-by-side summary of the two balance reports (formations off / on).
 $ErrorActionPreference = 'Stop'
 $files = @(
-    @{ Tag = 'v1(off)'; Path = 'D:\MimoGame\logs\simulation-report.json' },
-    @{ Tag = 'v2(on) '; Path = 'D:\MimoGame\logs\simulation-report-formations.json' }
+    @{ Tag = 'v1(off)'; Path = 'F:\MimoGame\logs\simulation-report.json' },
+    @{ Tag = 'v2(on) '; Path = 'F:\MimoGame\logs\simulation-report-formations.json' }
 )
 
 $rows = @()

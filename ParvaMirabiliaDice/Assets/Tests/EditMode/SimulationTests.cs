@@ -10,7 +10,7 @@ namespace ParvaMirabilia.Tests
 {
     /// <summary>
     /// Headless match simulations between differently built NPCs.
-    /// Writes D:/MimoGame/logs/simulation-report.json so the design review can quote real numbers.
+    /// Writes F:/MimoGame/logs/simulation-report.json so the design review can quote real numbers.
     ///
     /// Metric definitions (kept explicit because a wrong denominator once made a 12-round average
     /// look like a 22-round one):
