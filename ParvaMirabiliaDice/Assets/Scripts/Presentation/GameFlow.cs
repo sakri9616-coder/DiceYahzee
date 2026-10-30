@@ -277,6 +277,7 @@ namespace ParvaMirabilia.Presentation
             if (EventSystem.current == null)
             {
                 var eventSystem = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+                KeyboardOnlyInput.Apply(eventSystem);
                 DontDestroyOnLoad(eventSystem);
             }
 

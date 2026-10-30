@@ -86,7 +86,8 @@ namespace ParvaMirabilia.Presentation
             if (ring != null)
             {
                 ApplySprite(ring, Art + "panel-flat");
-                ring.rectTransform.sizeDelta = face.rectTransform.sizeDelta + Vector2.one * 5;
+                // The keep ring shows as a band around the face; 5 units a side reads at a glance.
+                ring.rectTransform.sizeDelta = face.rectTransform.sizeDelta + Vector2.one * 10;
             }
             Image shadow = ChildImage(die, "Shadow");
             if (shadow != null)
