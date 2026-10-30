@@ -547,12 +547,21 @@ namespace ParvaMirabilia.Presentation
                 !_sdPracticeHeld[3] && !_sdPracticeHeld[4];
             var offer = ScoreRules.Evaluate(ScoreHandKind.Pair, _sdPracticeHand);
             _sdPracticeFeedback.text = ScoreRules.Name(offer.Kind) + "\n" + SDCalculation(offer.Kind, _sdPracticeHand) + " = " + offer.Score;
+            if (_sdPracticeHeld[2] || _sdPracticeHeld[3] || _sdPracticeHeld[4])
+                _sdPracticeFeedback.text += "\n<color=#E88076>×のダイスをもう一度クリックして外し、1の目2つだけを残しましょう</color>";
             _sdPracticeGestureText.text = "";
         }
 
         private void SDPracticeReroll()
         {
-            if (!_sdPractice.gameObject.activeSelf || _sdPracticeStep != 0 || !SDPracticeCorrectSelection) return;
+            if (!_sdPractice.gameObject.activeSelf || _sdPracticeStep != 0) return;
+            if (!SDPracticeCorrectSelection)
+            {
+                // A right-click before the pair is set still answers, so the drill never feels frozen.
+                _sdPracticeFeedback.text = "<color=#E88076>振り直す前に、1の目2つだけを残してください</color>";
+                GameAudio.Play("ui_click");
+                return;
+            }
             _sdPracticeStep = 1;
             _sdPracticeRolling = true;
             _sdPracticeHand = new[] { 1, 1, 1, 5, 6 };

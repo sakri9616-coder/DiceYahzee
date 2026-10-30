@@ -171,6 +171,15 @@ namespace ParvaMirabilia.Presentation
                     for (int i = 0; i < 5; i++)
                     {
                         if (_sdPracticeHeld[i] == (i < 2)) continue;
+                        if (_sdPracticeHeld[i])
+                        {
+                            // A die kept by mistake gets a red cross, not the "keep me" arrow, so
+                            // the player can see which click to undo.
+                            Vector2 cross = new Vector2((i - 2) * 120, 150);
+                            _sdPracticeGestureGraphic.Line(cross + new Vector2(-7, -7), cross + new Vector2(7, 7), 2.4f, SDVerdictLoss);
+                            _sdPracticeGestureGraphic.Line(cross + new Vector2(-7, 7), cross + new Vector2(7, -7), 2.4f, SDVerdictLoss);
+                            continue;
+                        }
                         Vector2 target = new Vector2((i - 2) * 120, 142 + pulse);
                         _sdPracticeGestureGraphic.Line(target + new Vector2(-6, 4), target, 2, SDPositive);
                         _sdPracticeGestureGraphic.Line(target, target + new Vector2(6, 4), 2, SDPositive);
