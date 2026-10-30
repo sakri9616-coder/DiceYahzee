@@ -1,7 +1,7 @@
 {
   "dependencies": {
     "com.asist.game-bridge": {
-      "version": "file:D:/dev/asist-game-bridge",
+      "version": "file:F:/dev/asist-game-bridge",
       "depth": 0,
       "source": "local",
       "dependencies": {}
